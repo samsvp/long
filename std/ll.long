@@ -37,13 +37,13 @@ end
 fun take(lst, n) do
     fun take[lst, n](acc, current) do
         if current < n do
-            take([lst[current], ..acc], current + 1)
+            [lst[current], ..acc] |> take(current + 1)
         else
             acc
         end
     end
 
-    take([], n)
+    take([], 0)
     |> rev()
 end
 

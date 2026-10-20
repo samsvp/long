@@ -922,8 +922,7 @@ static sexpr_t parse_match(scanner_t* s, ctx_t* ctx, token_t match_token, const 
     return cons_sexpr(list);
 }
 
-static sexpr_t parse_operator(scanner_t* s, ctx_t* ctx, token_t start_token, uint8_t min_prec,
-                              const sv_allocator_t* a)
+static sexpr_t parse_prefix(scanner_t* s, ctx_t* ctx, token_t start_token, const sv_allocator_t* a)
 {
     sexpr_t lhs;
     if (start_token.kind == TOKEN_OPERATOR) {
@@ -958,6 +957,12 @@ static sexpr_t parse_operator(scanner_t* s, ctx_t* ctx, token_t start_token, uin
         unexpected_token(ctx, start_token, "Unexpected token", a);
     }
 
+    return lhs;
+}
+
+static sexpr_t parse_infix(scanner_t* s, ctx_t* ctx, sexpr_t lhs, uint8_t min_prec,
+                           const sv_allocator_t* a)
+{
     for (;;) {
         token_t token = scanner_peek(s, ctx);
         if (token.kind == TOKEN_ERROR)
@@ -1006,6 +1011,43 @@ static sexpr_t parse_operator(scanner_t* s, ctx_t* ctx, token_t start_token, uin
     return lhs;
 }
 
+static sexpr_t parse_form(scanner_t* s, ctx_t* ctx, token_t token, const sv_allocator_t* a)
+{
+    switch (token.fn) {
+        case FN_IF:
+            return parse_if(s, ctx, token, a);
+        case FN_FOR:
+            return parse_loop(s, ctx, token, a);
+        case FN_MAP:
+            return parse_loop(s, ctx, token, a);
+        case FN_MAPF:
+            return parse_loop(s, ctx, token, a);
+        case FN_FUN:
+            return parse_fun(s, ctx, token, a);
+        case FN_LIST: {
+            token_t left_paren = parser_expect(s, ctx, op_pattern(OPERATOR_LEFT_PAREN), a);
+            return parse_list(s, ctx, left_paren, kind_pattern(TOKEN_RIGHT_PAREN), a);
+        }
+        case FN_MATCH:
+            return parse_match(s, ctx, token, a);
+        case FN_IMPORT:
+            return parse_import(s, ctx, token, a);
+        case FN_LENGTH:
+        case FN_RECORD_GET_OR_NIL:
+        case FN_HASHMAP_GET_OR_NIL:
+        case FN_HASHMAP:
+        case FN_RECORD:
+        case FN_TUPLE:
+        case FN_WHILE: {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Parser '%s' is not implemented yet at line %" PRId64,
+                     special_fn_text(token.fn), token.line);
+            ctx_fail(ctx, (int)PARSER_ERROR_NOT_IMPLEMENTED, msg);
+        }
+    }
+    unexpected_token(ctx, token, "Unexpected token", a);
+}
+
 static sexpr_t parse_expr(scanner_t* s, ctx_t* ctx, uint8_t min_prec, const sv_allocator_t* a)
 {
     token_t token = parser_next(s, ctx);
@@ -1019,48 +1061,18 @@ static sexpr_t parse_expr(scanner_t* s, ctx_t* ctx, uint8_t min_prec, const sv_a
         ctx_fail(ctx, (int)PARSER_ERROR_EOF, msg);
     }
 
+    sexpr_t lhs;
     if (token.kind == TOKEN_KEYWORD && token.keyword == KEYWORD_DO) {
         token_pattern ends[] = { kw_pattern(KEYWORD_END) };
         token_t term;
-        return parse_block(s, ctx, ends, 1, token.line, &term, a);
+        lhs = parse_block(s, ctx, ends, 1, token.line, &term, a);
+    } else if (token.kind == TOKEN_SP_FUNCTION) {
+        lhs = parse_form(s, ctx, token, a);
+    } else {
+        lhs = parse_prefix(s, ctx, token, a);
     }
 
-    if (token.kind == TOKEN_SP_FUNCTION) {
-        switch (token.fn) {
-            case FN_IF:
-                return parse_if(s, ctx, token, a);
-            case FN_FOR:
-                return parse_loop(s, ctx, token, a);
-            case FN_MAP:
-                return parse_loop(s, ctx, token, a);
-            case FN_MAPF:
-                return parse_loop(s, ctx, token, a);
-            case FN_FUN:
-                return parse_fun(s, ctx, token, a);
-            case FN_LIST: {
-                token_t left_paren = parser_expect(s, ctx, op_pattern(OPERATOR_LEFT_PAREN), a);
-                return parse_list(s, ctx, left_paren, kind_pattern(TOKEN_RIGHT_PAREN), a);
-            }
-            case FN_MATCH:
-                return parse_match(s, ctx, token, a);
-            case FN_IMPORT:
-                return parse_import(s, ctx, token, a);
-            case FN_LENGTH:
-            case FN_RECORD_GET_OR_NIL:
-            case FN_HASHMAP_GET_OR_NIL:
-            case FN_HASHMAP:
-            case FN_RECORD:
-            case FN_TUPLE:
-            case FN_WHILE: {
-                char msg[128];
-                snprintf(msg, sizeof(msg), "Parser '%s' is not implemented yet at line %" PRId64,
-                         special_fn_text(token.fn), token.line);
-                ctx_fail(ctx, (int)PARSER_ERROR_NOT_IMPLEMENTED, msg);
-            }
-        }
-    }
-
-    return parse_operator(s, ctx, token, min_prec, a);
+    return parse_infix(s, ctx, lhs, min_prec, a);
 }
 
 sexpr_t parser_expr(scanner_t* s, ctx_t* ctx, const sv_allocator_t* a)

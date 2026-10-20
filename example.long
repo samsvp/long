@@ -42,5 +42,7 @@ len("wow, man") |> println()
 
 import ll("std/ll.long")
 
-ll::skip([1, 2, 3, 4, 5, 6], 2)
+[1, 2, 3, 4, 5, 6]
+|> ll::skip(2)
+|> ll::take(2)
 |> println()

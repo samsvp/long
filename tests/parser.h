@@ -247,13 +247,11 @@ static inline void sv_test_parser_errors(sv_testing_t* t)
    sv_test_parse_error(t, "\"abc", (int)SCANNER_ERROR_UNCLOSED_STRING);
    sv_test_parse_error(t, "\xFF", (int)SCANNER_ERROR_INVALID_UTF8);
    sv_test_parse_error(t, "x\xC3", (int)SCANNER_ERROR_INVALID_UTF8);
+   sv_test_parse_error(t, "if x do\ny end extra", (int)PARSER_ERROR_UNEXPECTED_TOKEN);
 
    ctx_t ctx = sv_test_parse_ctx();
    sv_arena_t arena = sv_arena_init(1 << 12, &sv_gpa, NULL);
    sexpr_t e;
-   sv_test_run(t, sv_test_parse("if x do\ny end extra", &ctx, &arena, &e, false));
-   sv_test_run(t, ctx.err.error_code == 0);
-
    sv_test_run(t, !sv_test_parse("(1 + 2", &ctx, &arena, &e, false));
    sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "')'"));
    sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "line 1"));

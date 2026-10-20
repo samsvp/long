@@ -674,10 +674,15 @@ static void compile_pipe(compiler_t* c, const sexpr_t* args, int64_t n, int64_t 
     if (rhs.tag != S_CONS || rhs.cons.size == 0)
         compiler_malformed(ctx, "pipe", line);
 
-    sv_str_t fn_name = expect_id(rhs.cons.arr[0], ctx);
     for (int64_t i = 1; i < rhs.cons.size; i++)
         compile_sexpr(c, rhs.cons.arr[i], false, ctx);
-    compile_id(c, fn_name, line, ctx);
+
+    sexpr_t callee = rhs.cons.arr[0];
+    if (callee.tag == S_CONS)
+        compile_sexpr(c, callee, false, ctx);
+    else
+        compile_id(c, expect_id(callee, ctx), line, ctx);
+
     uint8_t op = is_tail ? OP_TAIL_CALL : OP_CALL;
     emit_narrow(c, ctx, op, rhs.cons.size, "arguments", line);
 }

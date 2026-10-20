@@ -387,20 +387,20 @@ static inline void sv_test_compiler_logic(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("2;", 2));
    sv_test_run(t, sv_test_compiler_num("x = nil; (x or 5) + 1", 6));
    sv_test_run(t, sv_test_compiler_num("i = 1; [5, 6][i]", 6));
-   sv_test_run(t, sv_test_compiler_num("fun f() do 1; 2 end f()", 2));
+   sv_test_run(t, sv_test_compiler_num("fun f() do 1; 2 end; f()", 2));
 
    sv_test_run(t, sv_test_compiler_num("fun inc(x) do x + 1 end\n5 |> inc()", 6));
    sv_test_run(t, sv_test_compiler_num("fun add2(x, y) do x + y end\n1 |> add2(2)", 3));
    sv_test_run(t, sv_test_compiler_num("fun inc(x) do x + 1 end\n5 |> inc() |> inc()", 7));
    sv_test_run(t, sv_test_compiler_err("fun inc(x) do x + 1 end\n5 |> inc") == C_ERR_UNEXPECTED_SEXPR);
-   sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\n1 |> x.f(2)", "Expected an identifier at line 3"));
+   sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\n1 |> (2 + 3)", "Expected an identifier at line 3"));
    sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\nfun f[zzz](y) do y end", "Undefined variable 'zzz' at line 3"));
 }
 
 static inline void sv_test_compiler_runtime_errors(sv_testing_t* t)
 {
    sv_test_run(t, sv_test_compiler_runtime_msg("for x in 5 do x end", "Line 1: Type is not iterable: number"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("fun f(x) do x end f(1, 2)",
+   sv_test_run(t, sv_test_compiler_runtime_msg("fun f(x) do x end; f(1, 2)",
       "Line 1: Wrong number of arguments for 'f': expected 1, got 2"));
    sv_test_run(t, sv_test_compiler_runtime_msg("fun f(x) do x end\nr = { f: f }\n\nr.f(1, 2)",
       "Line 4: Wrong number of arguments for 'f': expected 1, got 2"));
@@ -535,11 +535,11 @@ static inline void sv_test_compiler_for_map(sv_testing_t* t)
 
 static inline void sv_test_compiler_functions(sv_testing_t* t)
 {
-   sv_test_run(t, sv_test_compiler_num("fun f(x) do x + 1 end f(2)", 3));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) do x + 1 end; f(2)", 3));
    sv_test_run(t, sv_test_compiler_num("x = 10\nfun f(y) do x + y end\nf(5)", 15));
    sv_test_run(t, sv_test_compiler_num("x = 1\ny = 2\nfun f() do x + y end\nz = 4\nf() + z", 7));
-   sv_test_run(t, sv_test_compiler_num("fun add(x, y) do x + y end add(3, 4)", 7));
-   sv_test_run(t, sv_test_compiler_num("fun f(x) do x + 1 end f(f(2))", 4));
+   sv_test_run(t, sv_test_compiler_num("fun add(x, y) do x + y end; add(3, 4)", 7));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) do x + 1 end; f(f(2))", 4));
    sv_test_run(t, sv_test_compiler_num(
       "fun h(x) do\n"
       "     k = x + 1\n"
@@ -555,7 +555,7 @@ static inline void sv_test_compiler_functions(sv_testing_t* t)
       "  g\n"
       "end\n"
       "f()(5)", 9));
-   sv_test_run(t, sv_test_compiler_kind("fun g(x) do x end g([1, 2, 3])", VALUE_OBJ));
+   sv_test_run(t, sv_test_compiler_kind("fun g(x) do x end; g([1, 2, 3])", VALUE_OBJ));
 }
 
 static inline void sv_test_compiler_closures(sv_testing_t* t)
@@ -609,7 +609,7 @@ static inline void sv_test_compiler_recursion(sv_testing_t* t)
       "     end\n"
       "end\n"
       "fib(10)", 55));
-   sv_test_run(t, sv_test_compiler_kind("fun f(x) do f end f(1)", VALUE_OBJ));
+   sv_test_run(t, sv_test_compiler_kind("fun f(x) do f end; f(1)", VALUE_OBJ));
    sv_test_run(t, sv_test_compiler_kind(
       "x = [1, 2]\n"
       "fun f[x](y) do\n"
@@ -946,8 +946,8 @@ static inline void sv_test_compiler_atoms(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("match 0 | :a do 1 | 0 do 2 end", 2));
    sv_test_run(t, sv_test_compiler_num("match :a | 0 do 2 | :a do 1 end", 1));
    sv_test_run(t, sv_test_compiler_num("match (:ok, 5) | (:error, _) do 0 | (:ok, v) do v end", 5));
-   sv_test_run(t, sv_test_compiler_num("fun f(x) | :a do 1 | _ do 2 end f(:a)", 1));
-   sv_test_run(t, sv_test_compiler_num("fun f(x) | :a do 1 | _ do 2 end f(0)", 2));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) | :a do 1 | _ do 2 end; f(:a)", 1));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) | :a do 1 | _ do 2 end; f(0)", 2));
    sv_test_run(t, sv_test_compiler_num("match {s: :ok, v: 3} | {s: :err, v: v} do 0 | {s: :ok, v: v} do v end", 3));
    sv_test_run(t, sv_test_compiler_num("match %{:k: 4} | %{:k: v} do v end", 4));
    /* An atom key and the string with the same text are different keys. */
@@ -966,12 +966,12 @@ static inline void sv_test_compiler_atoms(sv_testing_t* t)
 
 static inline void sv_test_compiler_fun_clauses(sv_testing_t* t)
 {
-   sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do 10 | _ do 20 end f(0)", 10));
-   sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do 10 | _ do 20 end f(3)", 20));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do 10 | _ do 20 end; f(0)", 10));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do 10 | _ do 20 end; f(3)", 20));
    /* A function whose clauses do not cover the argument raises, as Erlang does. */
    sv_test_run(t, sv_test_compiler_runtime_err("fun f(x) | 0 do 10 end\nf(3)")
                == VM_ERR_NO_CLAUSE);
-   sv_test_run(t, sv_test_compiler_num("fun f(x) | y do y + 1 end f(4)", 5));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) | y do y + 1 end; f(4)", 5));
 
    /* A block expression, and a function body that is just an expression. */
    sv_test_run(t, sv_test_compiler_num("do 1; 2 end", 2));
@@ -981,7 +981,7 @@ static inline void sv_test_compiler_fun_clauses(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("fun | a(x) x + 1 | b(y) y * 2 end\na(1) + b(3)", 8));
 
    /* Clause bodies are blocks. */
-   sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do y = 3; y + 1 end f(0)", 4));
+   sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do y = 3; y + 1 end; f(0)", 4));
    sv_test_run(t, sv_test_compiler_num("match 0 | 0 do y = 3; y + 1 end", 4));
 
    /* Guards. A failing guard reaches the next clause, and compile_fail has to
@@ -1019,9 +1019,9 @@ static inline void sv_test_compiler_fun_clauses(sv_testing_t* t)
       "first_neg([1, 2, 3])", 0));
 
    sv_test_run(t, sv_test_compiler_num(
-      "fun m(a, b) | (x, y) when x > y do x * 10 | (x, y) do y * 100 end m(2, 1)", 20));
+      "fun m(a, b) | (x, y) when x > y do x * 10 | (x, y) do y * 100 end; m(2, 1)", 20));
    sv_test_run(t, sv_test_compiler_num(
-      "fun m(a, b) | (x, y) when x > y do x * 10 | (x, y) do y * 100 end m(1, 2)", 200));
+      "fun m(a, b) | (x, y) when x > y do x * 10 | (x, y) do y * 100 end; m(1, 2)", 200));
 
    /* The guard is a plain expression, so a block body works behind one. */
    sv_test_run(t, sv_test_compiler_num("match 1 | 1 when true do y = 3; y + 1 end", 4));
@@ -1088,10 +1088,10 @@ static inline void sv_test_compiler_fun_clauses(sv_testing_t* t)
       "match (1, [2, 3]) | (a, [h, ..t]) when h == 2 do 4 | _ do 0 end", 4));
 
    sv_test_run(t, sv_test_compiler_num(
-      "fun swap(a, b) | (1, y) do y | (x, 2) do x end swap(1, 9)", 9));
+      "fun swap(a, b) | (1, y) do y | (x, 2) do x end; swap(1, 9)", 9));
    sv_test_run(t, sv_test_compiler_num(
-      "fun swap(a, b) | (1, y) do y | (x, 2) do x end swap(7, 2)", 7));
-   sv_test_run(t, sv_test_compiler_num("fun pair(a, b) | t do 5 end pair(1, 2)", 5));
+      "fun swap(a, b) | (1, y) do y | (x, 2) do x end; swap(7, 2)", 7));
+   sv_test_run(t, sv_test_compiler_num("fun pair(a, b) | t do 5 end; pair(1, 2)", 5));
 
    sv_test_run(t, sv_test_compiler_num(
       "fun len(l)\n"
