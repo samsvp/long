@@ -262,6 +262,23 @@ list_t ll_add(list_t left, list_t right, const sv_allocator_t* a)
     return init_from_bucket(node.bucket, node.start, node.len, new_tail, a);
 }
 
+list_t ll_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
+{
+    node_t node = list.cell->value;
+    if (node.len == 0 || to < 0 || to <= from)
+        return ll_empty();
+
+    if (from >= node.len)
+        return ll_slice(list.cell->value.tail, from - node.len, to - node.len, a);
+
+    if (to <= node.len)
+        return init_from_bucket(node.bucket, node.start + node.len - to, to - from, ll_empty(), a);
+
+    list_t tail = ll_slice(node.tail, 0, to - node.len, a);
+    TRY_NOT_NULL(tail.cell);
+    return init_from_bucket(node.bucket, node.start, node.len - from, tail, a);
+}
+
 #define SET_HEAD(...) do { head = __VA_ARGS__; if (head.cell == NULL) goto error; } while (0)
 #define RETURN_RECURSIVE(function) do {\
     if (node.tail.cell->value.len == 0) return ERR_LIST; \
