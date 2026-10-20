@@ -402,11 +402,36 @@ static sexpr_t parse_record(scanner_t* s, ctx_t* ctx, token_t open, const sv_all
 static sexpr_t parse_bracket(scanner_t* s, ctx_t* ctx, token_t left_bracket, sexpr_t lhs,
                              const sv_allocator_t* a)
 {
-    sexpr_t rhs = parse_expr(s, ctx, 0, a);
-    parser_expect_close(s, ctx, left_bracket, kind_pattern(TOKEN_RIGHT_BRACKET), a);
+    token_t dots;
+    bool has_from = !parser_check(s, ctx, kind_pattern(TOKEN_DOT_DOT), &dots);
+    sexpr_t from;
+    if (has_from) {
+        from = parse_expr(s, ctx, 0, a);
+    } else {
+        token_t zero = { .kind = TOKEN_LITERAL, .line = dots.line,
+                         .literal = { .kind = LITERAL_NUMBER, .number = 0 } };
+        from = atom_sexpr(zero);
+    }
 
-    sexpr_t items[] = { atom_sexpr(left_bracket), lhs, rhs };
-    return cons_of(items, 3, a);
+    if (has_from && !parser_check(s, ctx, kind_pattern(TOKEN_DOT_DOT), &dots)) {
+        parser_expect_close(s, ctx, left_bracket, kind_pattern(TOKEN_RIGHT_BRACKET), a);
+        sexpr_t items[] = { atom_sexpr(left_bracket), lhs, from };
+        return cons_of(items, 3, a);
+    }
+
+    token_t closer;
+    sexpr_t to;
+    if (parser_check(s, ctx, kind_pattern(TOKEN_RIGHT_BRACKET), &closer)) {
+        token_t nil = { .kind = TOKEN_LITERAL, .line = dots.line,
+                        .literal = { .kind = LITERAL_NIL } };
+        to = atom_sexpr(nil);
+    } else {
+        to = parse_expr(s, ctx, 0, a);
+        parser_expect_close(s, ctx, left_bracket, kind_pattern(TOKEN_RIGHT_BRACKET), a);
+    }
+
+    sexpr_t items[] = { atom_sexpr(left_bracket), lhs, from, to };
+    return cons_of(items, 4, a);
 }
 
 static sexpr_t parse_block(scanner_t* s, ctx_t* ctx, const token_pattern* ends,

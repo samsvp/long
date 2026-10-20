@@ -126,6 +126,7 @@ typedef enum {
     OP_RECORD,
     OP_TUPLE,
     OP_INDEX,
+    OP_SLICE,
     OP_LENGTH,
     OP_RECORD_GET,
     OP_RECORD_GET_OR_UNDEF,

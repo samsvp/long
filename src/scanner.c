@@ -189,6 +189,9 @@ static token_t scan_number(scanner_t* s, ctx_t* ctx, int64_t initial_i)
             break;
         }
 
+        if (s->i < s->source.size && s->source.chars[s->i] == '.')
+            break;
+
         if (has_dot)
             return slice_error_token(s, ctx, SCANNER_ERROR_INVALID_NUMBER,
                                      "Invalid number literal", initial_i);

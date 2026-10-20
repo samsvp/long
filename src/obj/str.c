@@ -39,3 +39,18 @@ value_t str_iter_next(str_iter_t* it, const sv_allocator_t* a)
     it->i += len;
     return value_init_str(slice, a);
 }
+
+int64_t str_count(sv_str_t s)
+{
+    int64_t n = 0;
+    for (int64_t i = 0; i < s.size; i += utf8_len(s.chars[i]))
+        n++;
+    return n;
+}
+
+int64_t str_offset(sv_str_t s, int64_t i, int64_t n)
+{
+    for (; n > 0 && i < s.size; n--)
+        i += utf8_len(s.chars[i]);
+    return i < s.size ? i : s.size;
+}

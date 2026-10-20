@@ -1,9 +1,9 @@
 #include "vm.h"
 #include "obj/list.h"
 #include "obj/map.h"
+#include "obj/str.h"
 #include "std/logger.h"
 #include "value.h"
-#include "ctx.h"
 #include <math.h>
 
 static void arr_remove(value_arr* arr, const sv_allocator_t* a)
@@ -17,6 +17,11 @@ static void arr_remove_n(value_arr* arr, int64_t n, const sv_allocator_t* a)
     for (int64_t i = arr->size - n; i < arr->size; i++)
         value_free(&arr->arr[i], a);
     arr->size -= n;
+}
+
+static bool is_integer(value_t v)
+{
+    return IS_NUMBER(v) && v.number == (double)(int64_t)v.number;
 }
 
 static bool value_is_truthy(value_t v)
@@ -491,34 +496,91 @@ break; }
         case OP_INDEX: {
             value_t key = sv_vec_pop(stack);
             value_t container = sv_vec_pop(stack);
-            if (!IS_MAP(container) && !IS_LIST(container) && !IS_TUPLE(container))
+            if (!IS_MAP(container) && !IS_LIST(container) && !IS_TUPLE(container) && !IS_STR(container))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&container, a); value_free(&key, a),
                       "Type is not indexable: %s", TYPE_NAME(container));
 
-            sv_opt_t(value_t) res;
+            value_t out;
             if (IS_MAP(container)) {
-                res = map_get(AS_MAP(container), key);
-            } else {
-                if (!IS_NUMBER(key) || key.number != (double)(int64_t)key.number) {
-                    value_free(&container, a);
-                    sv_str_t text = value_to_str(key, &vm->ctx);
-                    RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&key, a); sv_str_deinit(&text, a),
-                          "Index is not an integer: %.*s", (int)text.size, text.chars);
-                }
-                res = IS_LIST(container)
-                    ? ll_get(AS_LIST(container), (int64_t)key.number)
-                    : tuple_get(AS_TUPLE(container), (int64_t)key.number);
-            }
-            if (!res.is_some) {
-                value_free(&container, a);
-                sv_str_t text = value_to_str(key, &vm->ctx);
-                RAISE(VM_ERR_KEY_NOT_FOUND, value_free(&key, a); sv_str_deinit(&text, a),
-                      "Key not found: %.*s", (int)text.size, text.chars);
+                sv_opt_t(value_t) res = map_get(AS_MAP(container), key);
+                if (!res.is_some)
+                    goto index_err;
+                out = value_borrow(res.value);
+                goto index_ret;
             }
 
-            value_t out = value_borrow(res.value);
+            if (!is_integer(key)) {
+                value_free(&container, a);
+                sv_str_t text = value_to_str(key, &vm->ctx);
+                RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&key, a); sv_str_deinit(&text, a),
+                      "Index is not an integer: %.*s", (int)text.size, text.chars);
+            }
+            int64_t i = (int64_t)key.number;
+            if (IS_STR(container)) {
+                sv_str_t str = AS_STR(container);
+                int64_t start = i < 0 ? str.size : str_offset(str, 0, i);
+                if (start < str.size) {
+                    out = value_init_str(sv_str_slice(str, start, str_offset(str, start, 1)), a);
+                    TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when indexing a string");
+                } else {
+                    goto index_err;
+                }
+            } else {
+                sv_opt_t(value_t) res = IS_LIST(container)
+                    ? ll_get(AS_LIST(container), i)
+                    : tuple_get(AS_TUPLE(container), i);
+                if (!res.is_some)
+                    goto index_err;
+                out = value_borrow(res.value);
+            }
+
+        index_ret:
             value_free(&container, a);
             value_free(&key, a);
+            TRY_PUSH_OWNED(out);
+            break;
+
+        index_err: {
+            value_free(&container, a);
+            sv_str_t text = value_to_str(key, &vm->ctx);
+            RAISE(VM_ERR_KEY_NOT_FOUND, value_free(&key, a); sv_str_deinit(&text, a),
+                  "Key not found: %.*s", (int)text.size, text.chars);
+            }
+        }
+        case OP_SLICE: {
+            value_t to = sv_vec_pop(stack);
+            value_t from = sv_vec_pop(stack);
+            value_t container = sv_vec_pop(stack);
+            if (!IS_LIST(container) && !IS_STR(container))
+                RAISE(VM_ERR_OP_UNSUPPORTED_ARGS,
+                      value_free(&container, a); value_free(&from, a); value_free(&to, a),
+                      "Type is not sliceable: %s", TYPE_NAME(container));
+            if (!is_integer(from) || (!IS_NIL(to) && !is_integer(to))) {
+                value_free(&container, a);
+                sv_str_t text = value_to_str(is_integer(from) ? to : from, &vm->ctx);
+                RAISE(VM_ERR_OP_UNSUPPORTED_ARGS,
+                      value_free(&from, a); value_free(&to, a); sv_str_deinit(&text, a),
+                      "Slice bound is not an integer: %.*s", (int)text.size, text.chars);
+            }
+
+            int64_t lo = from.number;
+            int64_t hi = IS_NIL(to) ? INT64_MAX : (int64_t)to.number;
+            value_t out;
+            if (IS_LIST(container)) {
+                list_t list = ll_slice(AS_LIST(container), lo, hi, a);
+                TRY_OR(list.cell != NULL, value_free(&container, a), "when slicing a list");
+                out = value_wrap_list(list, a);
+                TRY_OR(out.obj.cell != NULL, ll_deinit(&list, a); value_free(&container, a),
+                       "when slicing a list");
+            } else {
+                sv_str_t str = AS_STR(container);
+                int64_t start = str_offset(str, 0, lo);
+                int64_t end = hi <= lo ? start : str_offset(str, start, hi - lo);
+                out = value_init_str(sv_str_slice(str, start, end), a);
+                TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when slicing a string");
+            }
+
+            value_free(&container, a);
             TRY_PUSH_OWNED(out);
             break;
         }
@@ -573,7 +635,7 @@ break; }
             if (IS_RECORD(val))
                 ret.number = AS_RECORD(val).size;
             else if (IS_STR(val))
-                ret.number = AS_STR(val).size;
+                ret.number = str_count(AS_STR(val));
             else if (IS_LIST(val))
                 ret.number = ll_count(AS_LIST(val));
             else if (IS_MAP(val))

@@ -28,4 +28,13 @@ void str_iter_deinit(str_iter_t*, const sv_allocator_t*);
  */
 value_t str_iter_next(str_iter_t*, const sv_allocator_t*);
 
+/**
+ * Number of unicode characters in the string.
+ */
+int64_t str_count(sv_str_t);
+/**
+ * Byte offset n unicode characters after the byte offset i, capped at the string size.
+ */
+int64_t str_offset(sv_str_t, int64_t i, int64_t n);
+
 #endif

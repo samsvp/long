@@ -4,6 +4,7 @@
 #include "value.h"
 #include "std/allocator_std.h"
 #include "obj/list.h"
+#include "obj/str.h"
 #include "vm.h"
 #include <math.h>
 #include <stdio.h>
@@ -77,7 +78,7 @@ value_t ntv_len(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
 
     switch (v.obj.cell->value.kind) {
     case OBJ_STR:
-        ret.number = AS_STR(v).size;
+        ret.number = str_count(AS_STR(v));
         break;
     case OBJ_LIST:
         ret.number = ll_count(AS_LIST(v));

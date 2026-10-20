@@ -824,6 +824,15 @@ static void compile_binary_op(compiler_t* c, uint8_t instruction, const char* wh
     emit(c, ctx, instruction, line);
 }
 
+static void compile_index(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
+{
+    if (n != 2 && n != 3)
+        compiler_malformed(ctx, "index", line);
+    for (int64_t i = 0; i < n; i++)
+        compile_sexpr(c, args[i], false, ctx);
+    emit(c, ctx, n == 2 ? OP_INDEX : OP_SLICE, line);
+}
+
 static void compile_operator(compiler_t* c, operator_kind op, const sexpr_t* args,
                              int64_t n, int64_t line, bool is_tail, ctx_t* ctx)
 {
@@ -841,7 +850,7 @@ static void compile_operator(compiler_t* c, operator_kind op, const sexpr_t* arg
         case OPERATOR_GREATER_EQUAL: compile_binary_op(c, OP_GREATER_EQUAL, "comparison", args, n, line, ctx); return;
         case OPERATOR_LESS: compile_binary_op(c, OP_LESS, "comparison", args, n, line, ctx); return;
         case OPERATOR_LESS_EQUAL: compile_binary_op(c, OP_LESS_EQUAL, "comparison", args, n, line, ctx); return;
-        case OPERATOR_LEFT_BRACKET: compile_binary_op(c, OP_INDEX, "index", args, n, line, ctx); return;
+        case OPERATOR_LEFT_BRACKET: compile_index(c, args, n, line, ctx); return;
         case OPERATOR_PIPE_FORWARD: compile_pipe(c, args, n, line, is_tail, ctx); return;
         case OPERATOR_DOT: compile_dot(c, args, n, line, ctx); return;
         case OPERATOR_DOUBLE_COLON: compile_double_colon(c, args, n, line, ctx); return;

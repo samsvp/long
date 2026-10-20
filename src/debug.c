@@ -60,6 +60,7 @@ static const char* op_name(vm_instructions op)
         case OP_RECORD: return "record";
         case OP_TUPLE: return "tuple";
         case OP_INDEX: return "index";
+        case OP_SLICE: return "slice";
         case OP_LENGTH: return "length";
         case OP_RECORD_GET: return "record_get";
         case OP_RECORD_GET_OR_UNDEF: return "record_get?";
@@ -211,6 +212,7 @@ void print_chunk(chunk_t chunk)
             case OP_NEGATE:
             case OP_POP:
             case OP_INDEX:
+            case OP_SLICE:
             case OP_LENGTH:
             case OP_NOT:
             case OP_DUP:
