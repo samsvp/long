@@ -1,5 +1,6 @@
 #include "std_native.h"
 
+#include "obj/iterator.h"
 #include "value.h"
 #include "std/allocator_std.h"
 #include "obj/list.h"
@@ -62,6 +63,47 @@ value_t ntv_print_arr(const value_t* values, uint8_t n, const vm_ctx_t* ctx)
 
     return value_nil;
 }
+
+value_t ntv_len(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
+{
+    assert(n == 1);
+
+    value_t v = args[0];
+
+    if (!IS_LIST(v) && !IS_STR(v) && !IS_MAP(v) && !IS_ITER(v))
+        return bad_arg_type_error(v, VALUE_OBJ, OBJ_ITER, ctx);
+
+    value_t ret = { .kind = VALUE_NUMBER, .number = 0 };
+
+    switch (v.obj.cell->value.kind) {
+    case OBJ_STR:
+        ret.number = AS_STR(v).size;
+        break;
+    case OBJ_LIST:
+        ret.number = ll_count(AS_LIST(v));
+        break;
+    case OBJ_MAP:
+        ret.number = map_count(AS_MAP(v));
+        break;
+    case OBJ_ITER: {
+        iter_t iter = AS_ITER(v);
+        while (!IS_NIL(iter_next(&iter, ctx->alloc)))
+            ret.number++;
+        break;
+    }
+    case OBJ_TUPLE:
+    case OBJ_ERR:
+    case OBJ_RECORD:
+    case OBJ_CLOSURE:
+    case OBJ_CLOSURE_MEMBER:
+    case OBJ_NATIVE_FN:
+    case OBJ_USER_VALUE:
+        return value_nil;
+    }
+
+    return ret;
+}
+
 
 #define RAND(formula) do {                                                     \
     if (!initialized) {                                                        \

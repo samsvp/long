@@ -1,0 +1,65 @@
+fun filter(iter, f) mapf v in iter do
+    if f(v) do v else nil end
+end
+
+fun rev(lst) do
+    fun rev(lst, acc) match lst
+    | [] do acc
+    | [head, ..tail] do rev(tail, [head, ..acc])
+    end
+
+    rev(lst, [])
+end
+
+fun mapi(lst, f) do
+    fun mapi[f](acc, lst, i) match lst
+    | [] do acc
+    | [head, ..tail] do
+        [ f(head, i), ..acc ]
+        |> mapi(tail, i + 1)
+    end
+
+    mapi([], lst, 0)
+    |> rev()
+end
+
+fun reduce(lst, f, v0) do
+    fun reduce[f](acc, lst) match lst
+    | [] do acc
+    | [head, ..tail] do
+        f(head, acc)
+        |> reduce(tail)
+    end
+
+    reduce(v0, lst)
+end
+
+fun take(lst, n) do
+    fun take[lst, n](acc, current) do
+        if current < n do
+            take([lst[current], ..acc], current + 1)
+        else
+            acc
+        end
+    end
+
+    take([], n)
+    |> rev()
+end
+
+fun skip(lst, n) do
+    lst_len = len(lst)
+
+    fun skip[lst, lst_len, n](acc, current) do
+        if current == lst_len do
+            acc
+        else if current >= n do
+            [lst[current], ..acc] |> skip(current + 1)
+        else
+            acc |> skip(current + 1)
+        end
+    end
+
+    skip([], n)
+    |> rev()
+end

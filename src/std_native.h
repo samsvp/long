@@ -25,6 +25,10 @@ value_t ntv_println(const value_t*, uint8_t, const vm_ctx_t*);
  */
 value_t ntv_print_arr(const value_t*, uint8_t, const vm_ctx_t*);
 /**
+ * Returns the length of an iterable.
+ */
+value_t ntv_len(const value_t*, uint8_t, const vm_ctx_t*);
+/**
  * Returns a random floating point number between min (the first value, inclusive) and max (the second value, inclusive).
  */
 value_t ntv_randf(const value_t*, uint8_t, const vm_ctx_t*);

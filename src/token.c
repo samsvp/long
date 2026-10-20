@@ -45,7 +45,6 @@ const char* special_fn_text(special_fn_kind fn)
         case FN_TUPLE: return "tuple";
         case FN_MAPF: return "mapf";
         case FN_MATCH: return "match";
-        case FN_REDUCE: return "reduce";
         case FN_WHILE: return "while";
         case FN_IMPORT: return "import";
         case FN_LENGTH: return "length";

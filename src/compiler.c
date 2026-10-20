@@ -1536,7 +1536,6 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
                 add_const(c, ctx, value_nil, a.line);
                 return;
             case FN_MATCH: compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, "Unlowered match expression");
-            case FN_REDUCE:
             case FN_WHILE: {
                 char msg[96];
                 snprintf(msg, sizeof(msg), "Compiler '%s' not implemented at line %" PRId64, special_fn_text(a.fn), a.line);
@@ -1649,6 +1648,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     record_field_id(c, sv_str_init("value"), 0, ctx);
 
     native_fn_t native_fns[] = {
+        { .arity = 1, .name = "len", .fn = ntv_len },
         { .arity = 1, .name = "print", .fn = ntv_print },
         { .arity = 1, .name = "println", .fn = ntv_println },
         { .arity = 1, .name = "print_vals", .fn = ntv_print_arr },

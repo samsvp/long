@@ -1051,7 +1051,6 @@ static sexpr_t parse_expr(scanner_t* s, ctx_t* ctx, uint8_t min_prec, const sv_a
             case FN_HASHMAP:
             case FN_RECORD:
             case FN_TUPLE:
-            case FN_REDUCE:
             case FN_WHILE: {
                 char msg[128];
                 snprintf(msg, sizeof(msg), "Parser '%s' is not implemented yet at line %" PRId64,

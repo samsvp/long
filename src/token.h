@@ -59,7 +59,6 @@ typedef enum {
     FN_TUPLE,
     FN_MAPF,
     FN_MATCH,
-    FN_REDUCE,
     FN_WHILE,
     FN_IMPORT, // must be last
 

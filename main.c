@@ -1,7 +1,6 @@
 #include <stdio.h>
 #define SV_IMPLEMENTATION
 #include "src/compiler.h"
-#include "src/debug.h"
 #include "src/std/allocator_std.h"
 
 static int run(vm_t* vm, ctx_t ctx)
@@ -20,7 +19,6 @@ static int run(vm_t* vm, ctx_t ctx)
         vm_deinit(vm);
         return 1;
     }
-    print_vm(*vm);
 
     vm_deinit(vm);
     return 0;
