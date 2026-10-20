@@ -1065,8 +1065,8 @@ static sv_str_t param_slot(char* buf, size_t n, int i)
  * Compiles a function body in a child compiler, linked as c->child until adopt_fn takes the function.
  */
 static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* params, sexpr_t body,
-                                   sv_str_t name, int64_t upvalue_offset, transient_hashmap_t members,
-                                   int64_t line, ctx_t* ctx)
+                            sv_str_t name, int64_t upvalue_offset, transient_hashmap_t members,
+                            int64_t line, ctx_t* ctx)
 {
     compiler_t* fc = compiler_init(c->current_path, c->arena, c->scratch, ctx);
     fc->members = members;
@@ -1092,7 +1092,8 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
             : expect_id(params->cons.arr[i], ctx);
         locals_add(fc->locals, p, ctx, line);
     }
-    locals_add(fc->locals, name, ctx, line);
+    if (name.size > 0)
+        locals_add(fc->locals, name, ctx, line);
 
     for (int64_t i = 0; i < params->cons.size; i++) {
         if (params->cons.arr[i].tag != S_CONS)
@@ -1108,7 +1109,9 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
     emit(fc, ctx, OP_RETURN, 0);
 
     fn_t* fn = &fc->builder.fn;
-    fn->name = sv_str_copy(name, &ctx->alloc);
+    fn->name = name.size > 0 ?
+        sv_str_copy(name, &ctx->alloc)
+        : sv_str_init_copy("Anonymous function", &ctx->alloc);
     if (fn->name.chars == NULL)
         compiler_oom(ctx, line);
     fn->arity = (uint8_t)params->cons.size;

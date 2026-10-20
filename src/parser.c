@@ -587,7 +587,20 @@ static sexpr_t parse_fun_body(scanner_t* s, ctx_t* ctx, sv_vec_t(sexpr_t)* list,
         id = *pending;
         *pending = (token_t){ .kind = TOKEN_EOF };
     } else {
-        id = parser_expect_id(s, ctx, a);
+        token_t token = parser_peek(s, ctx);
+        if (token.kind == TOKEN_LITERAL) {
+            id = token;
+            parser_next(s, ctx);
+        }
+        else {
+            id = (token_t){
+                .kind = TOKEN_LITERAL,
+                .literal = {
+                    .kind = LITERAL_IDENTIFIER,
+                    .literal = sv_str_init(""),
+                }
+            };
+        }
     }
     push_sexpr(list, atom_sexpr(id), a);
 

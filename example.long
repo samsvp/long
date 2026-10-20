@@ -23,9 +23,15 @@ fun fizz_buzz(n) do
     end
 end
 
-fizz_buzz(100)
 
 import math("math")
 
 math::sin(10)
 |> println()
+
+fizz_buzz(15)
+
+fun f(g, arg)
+    g(arg)
+
+f(fun (x) println(x), 10)

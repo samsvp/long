@@ -44,6 +44,10 @@ sv_str_t sv_strb_to_str(sv_str_builder*);
  * Creates a string view over the NULL-terminated array `c`.
  */
 sv_str_t sv_str_init(const char* c);
+/**
+ * Creates a string view over the NULL-terminated array `c`, copying the source string
+ */
+sv_str_t sv_str_init_copy(const char* c, const sv_allocator_t* a);
 
 /**
  * Returns an error string.
@@ -180,6 +184,17 @@ sv_str_t sv_str_init(const char* c)
    int64_t len = (int64_t)strlen(c);
    return (sv_str_t){
       .chars = c,
+      .size = len,
+   };
+}
+
+sv_str_t sv_str_init_copy(const char* c, const sv_allocator_t* a)
+{
+   int64_t len = (int64_t)strlen(c);
+   char* cc = sv_malloc(a, len);
+   memcpy(cc, c, len);
+   return (sv_str_t){
+      .chars = cc,
       .size = len,
    };
 }
