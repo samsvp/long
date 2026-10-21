@@ -613,11 +613,10 @@ static sexpr_t parse_fun_body(scanner_t* s, ctx_t* ctx, sv_vec_t(sexpr_t)* list,
         *pending = (token_t){ .kind = TOKEN_EOF };
     } else {
         token_t token = parser_peek(s, ctx);
-        if (token.kind == TOKEN_LITERAL) {
+        if (token.kind == TOKEN_LITERAL && token.literal.kind == LITERAL_IDENTIFIER) {
             id = token;
             parser_next(s, ctx);
-        }
-        else {
+        } else {
             id = (token_t){
                 .kind = TOKEN_LITERAL,
                 .literal = {

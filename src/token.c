@@ -38,11 +38,11 @@ const char* special_fn_text(special_fn_kind fn)
         case FN_FUN: return "fun";
         case FN_FOR: return "for";
         case FN_IF: return "if";
-        case FN_LIST: return "list";
+        case FN_LIST: return "$list";
         case FN_MAP: return "map";
-        case FN_HASHMAP: return "hashmap";
-        case FN_RECORD: return "record";
-        case FN_TUPLE: return "tuple";
+        case FN_HASHMAP: return "$hashmap";
+        case FN_RECORD: return "$record";
+        case FN_TUPLE: return "$tuple";
         case FN_MAPF: return "mapf";
         case FN_MATCH: return "match";
         case FN_WHILE: return "while";

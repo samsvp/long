@@ -35,31 +35,9 @@ fun reduce(lst, f, v0) do
 end
 
 fun take(lst, n) do
-    fun take[lst, n](acc, current) do
-        if current < n do
-            [lst[current], ..acc] |> take(current + 1)
-        else
-            acc
-        end
-    end
-
-    take([], 0)
-    |> rev()
+    lst[..n]
 end
 
 fun skip(lst, n) do
-    lst_len = len(lst)
-
-    fun skip[lst, lst_len, n](acc, current) do
-        if current == lst_len do
-            acc
-        else if current >= n do
-            [lst[current], ..acc] |> skip(current + 1)
-        else
-            acc |> skip(current + 1)
-        end
-    end
-
-    skip([], n)
-    |> rev()
+    lst[n..]
 end
