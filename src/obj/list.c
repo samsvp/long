@@ -117,13 +117,20 @@ void ll_deinit(list_t* l, const sv_allocator_t* a)
     sv_rc_deinit(l, a);
 }
 
-sv_opt_t(value_t) ll_get(list_t l, int64_t n)
+static sv_opt_t(value_t) node_get(list_t l, int64_t n)
 {
     node_t node = l.cell->value;
     if (n >= node.len || n < 0)
-        return node.len != 0 ? ll_get(node.tail, n - node.len) : sv_opt_none_t(value_t);
+        return node.len != 0 ? node_get(node.tail, n - node.len) : sv_opt_none_t(value_t);
 
     return sv_opt_some_t(value_t, node.bucket.cell->value.arr[node.start + node.len - 1 - n]);
+}
+
+sv_opt_t(value_t) ll_get(list_t l, int64_t n)
+{
+    if (n < 0)
+        n += ll_count(l);
+    return n < 0 ? sv_opt_none_t(value_t) : node_get(l, n);
 }
 
 sv_opt_t(value_t) ll_head(list_t l)
@@ -262,21 +269,31 @@ list_t ll_add(list_t left, list_t right, const sv_allocator_t* a)
     return init_from_bucket(node.bucket, node.start, node.len, new_tail, a);
 }
 
-list_t ll_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
+static list_t node_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
 {
     node_t node = list.cell->value;
     if (node.len == 0 || to < 0 || to <= from)
         return ll_empty();
 
     if (from >= node.len)
-        return ll_slice(list.cell->value.tail, from - node.len, to - node.len, a);
+        return node_slice(list.cell->value.tail, from - node.len, to - node.len, a);
 
     if (to <= node.len)
         return init_from_bucket(node.bucket, node.start + node.len - to, to - from, ll_empty(), a);
 
-    list_t tail = ll_slice(node.tail, 0, to - node.len, a);
+    list_t tail = node_slice(node.tail, 0, to - node.len, a);
     TRY_NOT_NULL(tail.cell);
     return init_from_bucket(node.bucket, node.start, node.len - from, tail, a);
+}
+
+list_t ll_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
+{
+    if (from < 0 || to < 0) {
+        int64_t n = ll_count(list);
+        from = from < 0 ? from + n : from;
+        to = to < 0 ? to + n : to;
+    }
+    return node_slice(list, from < 0 ? 0 : from, to, a);
 }
 
 #define SET_HEAD(...) do { head = __VA_ARGS__; if (head.cell == NULL) goto error; } while (0)

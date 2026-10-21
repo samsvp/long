@@ -517,14 +517,11 @@ break; }
             }
             int64_t i = (int64_t)key.number;
             if (IS_STR(container)) {
-                sv_str_t str = AS_STR(container);
-                int64_t start = i < 0 ? str.size : str_offset(str, 0, i);
-                if (start < str.size) {
-                    out = value_init_str(sv_str_slice(str, start, str_offset(str, start, 1)), a);
-                    TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when indexing a string");
-                } else {
+                sv_str_t c = str_get(AS_STR(container), i);
+                if (c.size == 0)
                     goto index_err;
-                }
+                out = value_init_str(c, a);
+                TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when indexing a string");
             } else {
                 sv_opt_t(value_t) res = IS_LIST(container)
                     ? ll_get(AS_LIST(container), i)
@@ -563,7 +560,7 @@ break; }
                       "Slice bound is not an integer: %.*s", (int)text.size, text.chars);
             }
 
-            int64_t lo = from.number;
+            int64_t lo = (int64_t)from.number;
             int64_t hi = IS_NIL(to) ? INT64_MAX : (int64_t)to.number;
             value_t out;
             if (IS_LIST(container)) {
@@ -573,10 +570,7 @@ break; }
                 TRY_OR(out.obj.cell != NULL, ll_deinit(&list, a); value_free(&container, a),
                        "when slicing a list");
             } else {
-                sv_str_t str = AS_STR(container);
-                int64_t start = str_offset(str, 0, lo);
-                int64_t end = hi <= lo ? start : str_offset(str, start, hi - lo);
-                out = value_init_str(sv_str_slice(str, start, end), a);
+                out = value_init_str(str_slice(AS_STR(container), lo, hi), a);
                 TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when slicing a string");
             }
 

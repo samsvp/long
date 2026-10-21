@@ -52,11 +52,11 @@ list_t ll_empty(void);
 void ll_deinit(list_t*, const sv_allocator_t*);
 
 /**
- * Returns the optional value at the position. The value is not borrowed.
+ * Returns the optional value at the position, counting from the end when negative. The value is not borrowed.
  */
 sv_opt_t(value_t) ll_get(list_t, int64_t);
 /**
- * Returns a new list sliced from the index `from` to `to`.
+ * Returns a new list sliced from the index `from` to `to`, counting from the end when negative.
  */
 list_t ll_slice(list_t, int64_t from, int64_t to, const sv_allocator_t*);
 

@@ -289,7 +289,7 @@ static inline void sv_test_compiler_indexing(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("if %{1: 2}[1] == 2 do 1 else 0 end", 1));
 
    sv_test_run(t, sv_test_compiler_runtime_err("[1, 2][5]") == VM_ERR_KEY_NOT_FOUND);
-   sv_test_run(t, sv_test_compiler_runtime_err("[1][0 - 1]") == VM_ERR_KEY_NOT_FOUND);
+   sv_test_run(t, sv_test_compiler_runtime_err("[1][0 - 2]") == VM_ERR_KEY_NOT_FOUND);
    sv_test_run(t, sv_test_compiler_runtime_err("%{1: 2}[3]") == VM_ERR_KEY_NOT_FOUND);
    sv_test_run(t, sv_test_compiler_runtime_err("[1][\"a\"]") == VM_ERR_OP_UNSUPPORTED_ARGS);
    sv_test_run(t, sv_test_compiler_runtime_msg("[1][0.5]", "Line 1: Index is not an integer: 0.5"));
@@ -353,7 +353,7 @@ static inline void sv_test_compiler_tuple_type(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("i = 1\nt = (5, 6)\nt[i]", 6));
 
    sv_test_run(t, sv_test_compiler_runtime_err("(1, 2)[5]") == VM_ERR_KEY_NOT_FOUND);
-   sv_test_run(t, sv_test_compiler_runtime_err("(1, 2)[0 - 1]") == VM_ERR_KEY_NOT_FOUND);
+   sv_test_run(t, sv_test_compiler_runtime_err("(1, 2)[0 - 3]") == VM_ERR_KEY_NOT_FOUND);
    sv_test_run(t, sv_test_compiler_runtime_err("(1, 2)[0.5]") == VM_ERR_OP_UNSUPPORTED_ARGS);
 
    sv_test_run(t, sv_test_compiler_str("t = (1, (2, \"s\"))\nt", "(1, (2, s))"));

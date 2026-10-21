@@ -25,7 +25,7 @@ void tuple_deinit(tuple_t*, const sv_allocator_t*);
  */
 bool tuple_eql(tuple_t, tuple_t);
 /**
- * Returns the element at the index, none when out of range.
+ * Returns the element at the index, counting from the end when negative, none when out of range.
  */
 sv_opt_t(value_t) tuple_get(tuple_t, int64_t);
 

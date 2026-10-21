@@ -33,8 +33,12 @@ value_t str_iter_next(str_iter_t*, const sv_allocator_t*);
  */
 int64_t str_count(sv_str_t);
 /**
- * Byte offset n unicode characters after the byte offset i, capped at the string size.
+ * The unicode character at the index, counting from the end when negative. Empty when out of range.
  */
-int64_t str_offset(sv_str_t, int64_t i, int64_t n);
+sv_str_t str_get(sv_str_t, int64_t);
+/**
+ * Slice between unicode character indices, counting from the end when negative.
+ */
+sv_str_t str_slice(sv_str_t, int64_t from, int64_t to);
 
 #endif

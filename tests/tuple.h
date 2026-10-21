@@ -25,7 +25,9 @@ static inline void sv_test_tuple(sv_testing_t* t)
    got = tuple_get(AS_TUPLE(tup), 1);
    sv_test_run(t, got.is_some && got.value.obj.cell == s.obj.cell);
    sv_test_run(t, !tuple_get(AS_TUPLE(tup), 3).is_some);
-   sv_test_run(t, !tuple_get(AS_TUPLE(tup), -1).is_some);
+   got = tuple_get(AS_TUPLE(tup), -1);
+   sv_test_run(t, got.is_some && got.value.number == 3);
+   sv_test_run(t, !tuple_get(AS_TUPLE(tup), -4).is_some);
 
    value_t same = value_init_tuple(items, 3, &sv_gpa);
    sv_test_run(t, value_eql(tup, same));

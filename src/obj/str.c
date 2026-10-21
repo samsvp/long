@@ -48,9 +48,33 @@ int64_t str_count(sv_str_t s)
     return n;
 }
 
-int64_t str_offset(sv_str_t s, int64_t i, int64_t n)
+/* Byte offset n unicode characters after the byte offset i, capped at the string size. */
+static int64_t str_offset(sv_str_t s, int64_t i, int64_t n)
 {
     for (; n > 0 && i < s.size; n--)
         i += utf8_len(s.chars[i]);
     return i < s.size ? i : s.size;
+}
+
+sv_str_t str_get(sv_str_t s, int64_t i)
+{
+    if (i < 0)
+        i += str_count(s);
+    int64_t start = i < 0 ? s.size : str_offset(s, 0, i);
+    return sv_str_slice(s, start, str_offset(s, start, 1));
+}
+
+sv_str_t str_slice(sv_str_t s, int64_t from, int64_t to)
+{
+    if (from < 0 || to < 0) {
+        int64_t n = str_count(s);
+        from = from < 0 ? from + n : from;
+        to = to < 0 ? to + n : to;
+    }
+    if (from < 0)
+        from = 0;
+    if (to <= from)
+        return sv_str_slice(s, 0, 0);
+    int64_t start = str_offset(s, 0, from);
+    return sv_str_slice(s, start, str_offset(s, start, to - from));
 }

@@ -34,6 +34,8 @@ bool tuple_eql(tuple_t t1, tuple_t t2)
 
 sv_opt_t(value_t) tuple_get(tuple_t tuple, int64_t i)
 {
+    if (i < 0)
+        i += tuple.size;
     if (i < 0 || i >= tuple.size)
         return sv_opt_none_t(value_t);
     return sv_opt_some_t(value_t, tuple.items[i]);
