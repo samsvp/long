@@ -1,5 +1,4 @@
 #include "modules/math.h"
-#include "modules/list.h"
 #define SV_ARENA_IMPLEMENTATION
 #include "std/arena.h"
 #include <assert.h>
@@ -1704,38 +1703,8 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 0, .name = "inf", .fn = ntvm_inf },
         { .arity = 0, .name = "nan", .fn = ntvm_nan },
     };
-    native_fn_t list_fns[] = {
-        { .arity = 2, .name = "map", .fn = ntvl_map },
-        { .arity = 2, .name = "mapi", .fn = ntvl_mapi },
-        { .arity = 2, .name = "filter", .fn = ntvl_filter },
-        { .arity = 2, .name = "filteri", .fn = ntvl_filteri },
-        { .arity = 3, .name = "reduce", .fn = ntvl_reduce },
-        { .arity = 3, .name = "reducei", .fn = ntvl_reducei },
-        { .arity = 2, .name = "zip", .fn = ntvl_zip },
-        { .arity = 3, .name = "zip_by", .fn = ntvl_zip_by },
-        { .arity = 2, .name = "any", .fn = ntvl_any },
-        { .arity = 2, .name = "all", .fn = ntvl_all },
-        { .arity = 2, .name = "take", .fn = ntvl_take },
-        { .arity = 2, .name = "skip", .fn = ntvl_skip },
-        { .arity = 2, .name = "at", .fn = ntvl_at },
-        { .arity = 1, .name = "count", .fn = ntvl_count },
-        { .arity = 2, .name = "prepend", .fn = ntvl_prepend },
-        { .arity = 1, .name = "min", .fn = ntvl_min },
-        { .arity = 1, .name = "max", .fn = ntvl_max },
-        { .arity = 2, .name = "min_by", .fn = ntvl_min_by },
-        { .arity = 2, .name = "max_by", .fn = ntvl_max_by },
-        { .arity = 2, .name = "find", .fn = ntvl_find },
-        { .arity = 2, .name = "find_by", .fn = ntvl_find_by },
-        { .arity = 2, .name = "each", .fn = ntvl_each },
-        { .arity = 2, .name = "concat", .fn = ntvl_concat },
-        { .arity = 1, .name = "sort", .fn = ntvl_sort },
-        { .arity = 2, .name = "sort_by", .fn = ntvl_sort_by },
-        { .arity = 1, .name = "sum", .fn = ntvl_sum },
-        { .arity = 1, .name = "mul", .fn = ntvl_mul },
-    };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },
-        { .name = "list", .native_fns = list_fns, .native_count = sizeof(list_fns) / sizeof(list_fns[0]) },
     };
     for (size_t i = 0; i < sizeof(native_fns) / sizeof(native_fns[0]); i++)
         add_native_fn(c, native_fns[i], empty, ctx);
