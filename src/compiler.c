@@ -1,4 +1,5 @@
 #include "modules/math.h"
+#include "modules/list.h"
 #define SV_ARENA_IMPLEMENTATION
 #include "std/arena.h"
 #include <assert.h>
@@ -1180,7 +1181,9 @@ static void compile_fun(compiler_t* c, const sexpr_t* args, int64_t n, int64_t l
     uint32_t fi = adopt_fn(c, line, ctx);
     emit_wide(c, ctx, OP_LOAD_CLOSURE, fi, 0);
     emit(c, ctx, has_cls ? (uint8_t)cls->cons.size : 0, 0);
-    add_var(c, name, line, ctx);
+    // anonymous: leave the closure on the stack
+    if (name.size > 0)
+        add_var(c, name, line, ctx);
 }
 
 static void compile_fun_group(compiler_t* c, const sexpr_t* members, int64_t n, int64_t line, ctx_t* ctx)
@@ -1480,10 +1483,13 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
     current_dir[length] = '\0';
     memcpy(current_dir, c->current_path, length);
 
-    char* import_path = sv_str_to_c_str(args[1].atom.literal.str, c->scratch);
+    sv_str_t literal = args[1].atom.literal.str;
+    char* import_path = sv_str_to_c_str(literal, c->scratch);
     char import_full_path[FILENAME_MAX];
     cwk_path_join(current_dir, import_path, import_full_path, sizeof(import_full_path));
-    sv_str_t full_path = sv_str_init(import_full_path);
+    value_t literal_key = value_init_str(literal, c->scratch);
+    sv_opt_t(value_t) native = thm_get(c->modules.compiled_modules, literal_key);
+    sv_str_t full_path = native.is_some && IS_BOOL(native.value) ? literal : sv_str_init(import_full_path);
     value_t path_key = value_init_str(full_path, c->scratch);
 
     bool is_new = !thm_get(c->modules.compiled_modules, path_key).is_some;
@@ -1621,7 +1627,8 @@ static void add_native_mod(compiler_t* c, native_module_t mod, ctx_t* ctx)
     sv_str_t mod_name = sv_str_init(mod.name);
     for (int64_t i = 0; i < mod.native_count; i++)
         add_native_fn(c, mod.native_fns[i], mod_name, ctx);
-    module_put(&c->modules.compiled_modules, mod_name, value_nil, 0, ctx);
+    // true marks it native, so imports find it from any directory
+    module_put(&c->modules.compiled_modules, mod_name, value_true, 0, ctx);
 }
 
 vm_t compile(const char* base_path, compile_opts_t opts, ctx_t* ctx)
@@ -1697,8 +1704,38 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 0, .name = "inf", .fn = ntvm_inf },
         { .arity = 0, .name = "nan", .fn = ntvm_nan },
     };
+    native_fn_t list_fns[] = {
+        { .arity = 2, .name = "map", .fn = ntvl_map },
+        { .arity = 2, .name = "mapi", .fn = ntvl_mapi },
+        { .arity = 2, .name = "filter", .fn = ntvl_filter },
+        { .arity = 2, .name = "filteri", .fn = ntvl_filteri },
+        { .arity = 3, .name = "reduce", .fn = ntvl_reduce },
+        { .arity = 3, .name = "reducei", .fn = ntvl_reducei },
+        { .arity = 2, .name = "zip", .fn = ntvl_zip },
+        { .arity = 3, .name = "zip_by", .fn = ntvl_zip_by },
+        { .arity = 2, .name = "any", .fn = ntvl_any },
+        { .arity = 2, .name = "all", .fn = ntvl_all },
+        { .arity = 2, .name = "take", .fn = ntvl_take },
+        { .arity = 2, .name = "skip", .fn = ntvl_skip },
+        { .arity = 2, .name = "at", .fn = ntvl_at },
+        { .arity = 1, .name = "count", .fn = ntvl_count },
+        { .arity = 2, .name = "prepend", .fn = ntvl_prepend },
+        { .arity = 1, .name = "min", .fn = ntvl_min },
+        { .arity = 1, .name = "max", .fn = ntvl_max },
+        { .arity = 2, .name = "min_by", .fn = ntvl_min_by },
+        { .arity = 2, .name = "max_by", .fn = ntvl_max_by },
+        { .arity = 2, .name = "find", .fn = ntvl_find },
+        { .arity = 2, .name = "find_by", .fn = ntvl_find_by },
+        { .arity = 2, .name = "each", .fn = ntvl_each },
+        { .arity = 2, .name = "concat", .fn = ntvl_concat },
+        { .arity = 1, .name = "sort", .fn = ntvl_sort },
+        { .arity = 2, .name = "sort_by", .fn = ntvl_sort_by },
+        { .arity = 1, .name = "sum", .fn = ntvl_sum },
+        { .arity = 1, .name = "mul", .fn = ntvl_mul },
+    };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },
+        { .name = "list", .native_fns = list_fns, .native_count = sizeof(list_fns) / sizeof(list_fns[0]) },
     };
     for (size_t i = 0; i < sizeof(native_fns) / sizeof(native_fns[0]); i++)
         add_native_fn(c, native_fns[i], empty, ctx);

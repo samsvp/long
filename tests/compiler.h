@@ -491,6 +491,87 @@ static inline void sv_test_compiler_native_calls(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_apply("\napply(1, 2)", "Line 2: Type is not callable"));
 }
 
+/* Adds the list import and shared callbacks to src. */
+#define SV_TEST_LIST(src) "import list(\"list\")\nfun big(x) x > 1\nfun add(x, acc) x + acc\n" src
+
+static inline void sv_test_compiler_list_module(sv_testing_t* t)
+{
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("fun dbl(x) x * 2\nlist::map([3, 1, 2], dbl)"), "[6, 2, 4]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("fun dbl(c) c + c\nlist::map(\"ab\", dbl)"), "[aa, bb]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::mapi([3, 1, 2], add)"), "[3, 2, 4]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::filter([3, 1, 2], big)"), "[3, 2]"));
+   sv_test_run(t, sv_test_compiler_str(
+      SV_TEST_LIST("fun not_l(c) c != \"l\"\nlist::filter(\"héllo\", not_l)"), "héo"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("fun pos(x, i) i > 0\nlist::filteri([3, 1, 2], pos)"),
+      "[1, 2]"));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::reduce([3, 1, 2], add, 0)"), 6));
+   sv_test_run(t, sv_test_compiler_num(
+      SV_TEST_LIST("fun addw(x, acc, i) acc + x * i\nlist::reducei([3, 1, 2], addw, 0)"), 5));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::zip([3, 1, 2], \"ab\")"), "[(3, a), (1, b)]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::zip_by([1, 2], [10, 20, 30], add)"), "[11, 22]"));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("list::any([1, 2], big) and not list::any([1], big)"),
+      VALUE_BOOL));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("(list::any([1, 2], big), list::all([1, 2], big))"),
+      "(true, false)"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::take([3, 1, 2], 2)"), "[3, 1]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::take(\"héllo\", 2)"), "hé"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::skip([3, 1, 2], 2)"), "[2]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::skip(\"héllo\", 1)"), "éllo"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::take([1], -1)"), "[]"));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::at([3, 1, 2], -1)"), 2));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::at(\"héllo\", 1)"), "é"));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("list::at([3, 1, 2], 9)"), VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::count(\"héllo\")"), 5));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::count([3, 1, 2])"), 3));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::prepend([3, 1], 0)"), "[0, 3, 1]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::prepend(\"bc\", \"a\")"), "abc"));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::min([3, 1, 2])"), 1));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::max(\"hello\")"), "o"));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("list::min([])"), VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_str(
+      SV_TEST_LIST("fun size(s) len(s)\n(list::min_by([\"aaa\", \"b\", \"cc\"], size), "
+                   "list::max_by([\"aaa\", \"b\", \"cc\"], size))"), "(b, aaa)"));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::find([3, 1, 2], 2)"), 2));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::find(\"abc\", \"c\")"), 2));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("list::find([3, 1, 2], 9)"), VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::find_by([1, 3, 2], big)"), 3));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("list::find_by([1], big)"), VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("list::each([1, 2], big)"), VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::concat([3, 1], [4])"), "[3, 1, 4]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::concat(\"ab\", \"cd\")"), "abcd"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::sort([3, 1, 2])"), "[1, 2, 3]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::sort(\"hello\")"), "ehllo"));
+   sv_test_run(t, sv_test_compiler_str(
+      SV_TEST_LIST("fun size(s) len(s)\nlist::sort_by([\"aaa\", \"b\", \"cc\", \"d\"], size)"), "[b, d, cc, aaa]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("import math(\"math\")\nlist::take([1, 2], math::inf())"),
+      "[1, 2]"));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("import math(\"math\")\nlist::skip(\"ab\", math::nan())"), "ab"));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("import math(\"math\")\nlist::at([1], math::nan())"),
+      VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_kind(SV_TEST_LIST("import math(\"math\")\nlist::at(\"ab\", math::pow(10, 300))"),
+      VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_str(SV_TEST_LIST("list::concat(\"\", \"\") + list::prepend(\"b\", \"\")"), "b"));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::sum([3, 1, 2])"), 6));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::mul([3, 1, 2])"), 6));
+   sv_test_run(t, sv_test_compiler_num(SV_TEST_LIST("list::sum([]) + list::mul([])"), 1));
+
+   sv_test_run(t, sv_test_compiler_runtime_msg(SV_TEST_LIST("fun bad(x) x - nil\nlist::map([1], bad)"),
+      "Line 4: Invalid operands for '-': number and nil"));
+   sv_test_run(t, sv_test_compiler_runtime_msg(SV_TEST_LIST("list::sort([1, \"a\"])"),
+      "Line 4: Wrong type of argument: expected number, got string"));
+   sv_test_run(t, sv_test_compiler_runtime_msg(SV_TEST_LIST("list::max([1, 3, \"a\"])"),
+      "Line 4: Wrong type of argument: expected number, got string"));
+   sv_test_run(t, sv_test_compiler_runtime_msg(
+      SV_TEST_LIST("fun bad(x, y) x - nil\nlist::zip_by([1, 2], [3, 4], bad)"),
+      "Line 4: Invalid operands for '-': number and nil"));
+   sv_test_run(t, sv_test_compiler_runtime_msg(SV_TEST_LIST("list::count(1)"),
+      "Line 4: Wrong type of argument: expected list or string, got number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg(SV_TEST_LIST("list::sum(\"ab\")"),
+      "Line 4: Wrong type of argument: expected number, got string"));
+}
+
+#undef SV_TEST_LIST
+
 static inline void sv_test_compiler_for(sv_testing_t* t)
 {
    sv_test_run(t, sv_test_compiler_num(
@@ -611,6 +692,18 @@ static inline void sv_test_compiler_closures(sv_testing_t* t)
       "     g\n"
       "end\n"
       "f(4)(5)", 9));
+   sv_test_run(t, sv_test_compiler_num(
+      "fun g(h) h(1)\n"
+      "a = g(fun (x) x + 1)\n"
+      "b = g(fun (y) y + 2)\n"
+      "a + b", 5));
+   sv_test_run(t, sv_test_compiler_num(
+      "fun k() do\n"
+      "     a = fun (x) x\n"
+      "     b = fun (x) x + 10\n"
+      "     a(1) + b(1)\n"
+      "end\n"
+      "k()", 12));
    sv_test_run(t, sv_test_compiler_num(
       "x = 5\n"
       "fun f[x](y) do\n"
@@ -1438,6 +1531,7 @@ static inline void sv_test_compiler(sv_testing_t* t)
    sv_test_compiler_errors(t);
    sv_test_compiler_runtime_errors(t);
    sv_test_compiler_native_calls(t);
+   sv_test_compiler_list_module(t);
    sv_test_compiler_error_messages(t);
    sv_test_compiler_oom(t);
    sv_test_compiler_imports(t);

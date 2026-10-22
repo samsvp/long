@@ -25,6 +25,20 @@ void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
     sv_vec_deinit(arr, a);
 }
 
+bool value_is_truthy(value_t v)
+{
+    switch (v.kind) {
+        case VALUE_UNDEFINED:
+        case VALUE_NIL: return false;
+        case VALUE_BOOL: return v.boolean;
+        case VALUE_C:
+        case VALUE_NUMBER:
+        case VALUE_ATOM:
+        case VALUE_OBJ: return true;
+    }
+    return true;
+}
+
 value_t value_borrow(value_t v)
 {
     switch (v.kind) {

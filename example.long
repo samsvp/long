@@ -40,7 +40,7 @@ len([1, 2, 3]) |> println()
 len(%{"hello": "world"}) |> println()
 len("wow, man") |> println()
 
-import list("std/ll.long")
+import list("list")
 
 [1, 2, 3, 4, 5, 6]
 |> list::skip(2)

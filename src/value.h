@@ -81,6 +81,10 @@ void value_free(value_t*, const sv_allocator_t*);
  */
 void value_arr_deinit(sv_vec_t(value_t)*, const sv_allocator_t*);
 value_t value_borrow(value_t);
+/**
+ * Only nil, false and undefined are falsy.
+ */
+bool value_is_truthy(value_t);
 bool value_eql(value_t, value_t);
 
 /**

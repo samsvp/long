@@ -984,6 +984,22 @@ static sexpr_t parse_prefix(scanner_t* s, ctx_t* ctx, token_t start_token, const
     return lhs;
 }
 
+/**
+ * The name after `::`. Keywords count as names here, as in `list::map`.
+ */
+static sexpr_t parse_member(scanner_t* s, ctx_t* ctx, const sv_allocator_t* a)
+{
+    token_t token = scanner_peek(s, ctx);
+    if (token.kind != TOKEN_SP_FUNCTION)
+        return parse_expr(s, ctx, infix_prec(OPERATOR_DOUBLE_COLON).right, a);
+    scanner_next(s, ctx);
+    return atom_sexpr((token_t){
+        .kind = TOKEN_LITERAL,
+        .line = token.line,
+        .literal = { .kind = LITERAL_IDENTIFIER, .literal = sv_str_init(special_fn_text(token.fn)) },
+    });
+}
+
 static sexpr_t parse_infix(scanner_t* s, ctx_t* ctx, sexpr_t lhs, uint8_t min_prec,
                            const sv_allocator_t* a)
 {
@@ -1021,7 +1037,7 @@ static sexpr_t parse_infix(scanner_t* s, ctx_t* ctx, sexpr_t lhs, uint8_t min_pr
         scanner_next(s, ctx);
 
         if (prec.has_right) {
-            sexpr_t rhs = parse_expr(s, ctx, prec.right, a);
+            sexpr_t rhs = op == OPERATOR_DOUBLE_COLON ? parse_member(s, ctx, a) : parse_expr(s, ctx, prec.right, a);
             sexpr_t items[] = { atom_sexpr(token), lhs, rhs };
             lhs = cons_of(items, 3, a);
         } else if (op == OPERATOR_LEFT_PAREN) {

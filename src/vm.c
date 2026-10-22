@@ -24,20 +24,6 @@ static bool is_integer(value_t v)
     return IS_NUMBER(v) && v.number == (double)(int64_t)v.number;
 }
 
-static bool value_is_truthy(value_t v)
-{
-    switch (v.kind) {
-        case VALUE_UNDEFINED:
-        case VALUE_NIL: return false;
-        case VALUE_BOOL: return v.boolean;
-        case VALUE_C:
-        case VALUE_NUMBER:
-        case VALUE_ATOM:
-        case VALUE_OBJ: return true;
-    }
-    return true;
-}
-
 vm_t vm_init(fn_t fn, int64_t max_call_frames, globals_t globals_names_to_index, const sv_allocator_t* a)
 {
     return (vm_t){
