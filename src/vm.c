@@ -105,38 +105,32 @@ const char* vm_field_name(const vm_ctx_t* ctx, uint32_t id)
 
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm);
 
-value_t vm_call(vm_t* vm, uint32_t index, value_t* args, uint8_t arg_count)
-{
 #define ERROR(_msg, code) error_fmt(code, line, a, "%s", _msg)
-    vm->stack.size = 0;
-    vm->locals.size = 0;
+value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg_count)
+{
     const sv_allocator_t* a = vm->ctx.alloc;
-    // raised by the host until the callee is known, then its definition line
-    int64_t line = 0;
-    if (index >= vm->globals.size)
-        return value_init_err(ERROR("Undefined global", VM_ERR_UNDEFINED_VARIABLE), a);
-
-    value_t value = vm->globals.arr[index];
-    if (!IS_CLOSURE(value) && !IS_NATIVE(value) && !IS_CLOSURE_MEMBER(value))
+    // the caller's line until the callee is known, then its definition line
+    const int64_t caller_line = vm->ctx.line;
+    int64_t line = caller_line;
+    if (!IS_CLOSURE(callee) && !IS_NATIVE(callee) && !IS_CLOSURE_MEMBER(callee))
         return value_init_err(ERROR("Type is not callable", VM_ERR_WRONG_TYPE), a);
 
-    if (IS_NATIVE(value)) {
-        native_fn_t fn = AS_NATIVE(value);
+    if (IS_NATIVE(callee)) {
+        native_fn_t fn = AS_NATIVE(callee);
         if (fn.arity != arg_count)
             return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
-        vm->ctx.line = 0;
-        return fn.fn(args, arg_count, &vm->ctx);
+        return fn.fn(args, arg_count, vm);
     }
 
     fn_t* fn;
     value_arr upvalues;
     sv_rc_t(closure_group_t) group = { 0 };
-    if (IS_CLOSURE(value)) {
-        closure_t* cls = &AS_CLOSURE(value);
+    if (IS_CLOSURE(callee)) {
+        closure_t* cls = &AS_CLOSURE(callee);
         fn = cls_get_vm(*cls);
         upvalues = cls->upvalues;
     } else {
-        closure_member_t* member = &AS_CLOSURE_MEMBER(value);
+        closure_member_t* member = &AS_CLOSURE_MEMBER(callee);
         fn = clsm_get_vm(*member);
         upvalues = member->group.cell->value.upvalues;
         group = member->group;
@@ -144,30 +138,31 @@ value_t vm_call(vm_t* vm, uint32_t index, value_t* args, uint8_t arg_count)
     line = fn->line;
     if (arg_count != fn->arity)
         return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
+    if (vm->call_frames.size >= vm->max_call_frames)
+        return value_init_err(ERROR("Call stack overflow", VM_ERR_STACK_OVERFLOW), a);
 
+    const int64_t locals_offset = vm->locals.size;
+    const int64_t stack_offset = vm->stack.size;
     int success;
-    sv_vec_push(&vm->call_frames, init_frame(fn, 0, 0, upvalues, group), &success, a);
-    if (!success)
-        return value_init_err(ERROR("Out of memory when creating call frame", VM_ERR_OOM), a);
-
-    if (arg_count > 0) {
-        for (uint8_t i = 0; i < arg_count; i++)
-            sv_vec_push(&vm->locals, value_borrow(args[i]), &success, a);
-        if (!success)
-            return value_init_err(ERROR("Out of memory when passing arguments", VM_ERR_OOM), a);
-    }
-    sv_vec_push(&vm->locals, value_borrow(value), &success, a);
+    sv_vec_grow_cap(&vm->locals, locals_offset + arg_count + 1, &success, a);
     if (!success)
         return value_init_err(ERROR("Out of memory when passing arguments", VM_ERR_OOM), a);
+    for (uint8_t i = 0; i < arg_count; i++)
+        vm->locals.arr[vm->locals.size++] = value_borrow(args[i]);
+    vm->locals.arr[vm->locals.size++] = value_borrow(callee);
 
-    sv_opt_t(error_t) ret = vm_run_frame(vm);
-    arr_remove_n(&vm->locals, vm->locals.size, a);
+    sv_vec_push(&vm->call_frames, init_frame(fn, locals_offset, stack_offset, upvalues, group),
+                &success, a);
+    sv_opt_t(error_t) ret = success ? vm_run_frame(vm)
+        : sv_opt_some_t(error_t, ERROR("Out of memory when creating call frame", VM_ERR_OOM));
 
-    if (ret.is_some)
-        return value_init_err(ret.value, a);
-
-    return vm->stack.arr[--vm->stack.size];
+    value_t res = ret.is_some ? value_init_err(ret.value, a) : sv_vec_pop(vm->stack);
+    arr_remove_n(&vm->stack, vm->stack.size - stack_offset, a);
+    arr_remove_n(&vm->locals, vm->locals.size - locals_offset, a);
+    vm->ctx.line = caller_line;
+    return res;
 }
+#undef ERROR
 
 value_t vm_call_name(vm_t* vm, value_t* args, uint8_t arg_count,
                      sv_str_t function_name, sv_str_t file_name)
@@ -176,8 +171,8 @@ value_t vm_call_name(vm_t* vm, value_t* args, uint8_t arg_count,
     if (!index.is_some)
         return value_init_err(error_fmt(VM_ERR_UNDEFINED_VARIABLE, 0, vm->ctx.alloc, "Undefined global"),
                               vm->ctx.alloc);
-    return vm_call(vm, index.value, args, arg_count);
-#undef ERROR
+    vm->ctx.line = 0;
+    return vm_call_value(vm, vm->globals.arr[index.value], args, arg_count);
 }
 
 sv_opt_t(error_t) vm_run(vm_t* vm)
@@ -293,6 +288,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 break; }
 
     const sv_allocator_t* a = vm->ctx.alloc;
+    const int64_t base = vm->call_frames.size;
 
     error_t err;
     int success = 0;
@@ -747,7 +743,10 @@ break; }
     if (fn.arity != arg_count)                                                                                \
         ERR_WRONG_ARITY(sv_str_init(fn.name), fn.arity);                                                      \
     vm->ctx.line = LINE();                                                                                    \
-    value_t ret = fn.fn(args, arg_count, &vm->ctx);                                                           \
+    vm->stack = stack;                                                                                        \
+    value_t ret = fn.fn(args, arg_count, vm);                                                                 \
+    stack = vm->stack;                                                                                        \
+    frame = &sv_vec_last(vm->call_frames);                                                                    \
     TRY_OR(ret.kind != VALUE_OBJ || ret.obj.cell != NULL, value_free(&value, a),                              \
            "when returning from a native function");                                                          \
     if (IS_ERR(ret)) {                                                                                        \
@@ -915,9 +914,9 @@ break; }
             arg_bytes = READ_BYTE();
             break;
         case OP_RETURN: {
-            if (vm->call_frames.size == 1) {
+            if (vm->call_frames.size == base) {
                 vm->stack = stack;
-                vm->call_frames.size = 0;
+                vm->call_frames.size--;
                 return sv_opt_none_t(error_t);
             }
             value_t res = sv_vec_pop(stack);
@@ -937,7 +936,7 @@ break; }
 
 error:
     vm->stack = stack;
-    vm->call_frames.size = 0;
+    vm->call_frames.size = base - 1;
     return sv_opt_some_t(error_t, err);
 
 #undef SET

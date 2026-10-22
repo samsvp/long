@@ -79,9 +79,9 @@ const char* vm_field_name(const vm_ctx_t*, uint32_t id);
  */
 sv_opt_t(error_t) vm_run(vm_t*);
 /**
- * Calls the given function by globals index.
+ * Calls a callable value on top of the vm.
  */
-value_t vm_call(vm_t*, uint32_t, value_t*, uint8_t);
+value_t vm_call_value(vm_t*, value_t, const value_t*, uint8_t);
 /**
  * Calls the given function by name.
  */

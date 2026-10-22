@@ -12,12 +12,12 @@ static const double E = 2.71828182845904523536;
 
 #define CHECK_NUMBER(v) do {                                                   \
     if (!IS_NUMBER(v))                                                         \
-        return bad_arg_type_error(v, VALUE_NUMBER, OBJ_LIST, ctx);             \
+        return bad_arg_type_error(v, VALUE_NUMBER, OBJ_LIST, &vm->ctx);        \
 } while (0)
 
 // x is the argument in expr
 #define UNARY(name, expr)                                                      \
-value_t ntvm_##name(const value_t* args, uint8_t n, const vm_ctx_t* ctx)       \
+value_t ntvm_##name(const value_t* args, uint8_t n, vm_t* vm)                  \
 {                                                                              \
     assert(n == 1);                                                            \
     CHECK_NUMBER(args[0]);                                                     \
@@ -27,7 +27,7 @@ value_t ntvm_##name(const value_t* args, uint8_t n, const vm_ctx_t* ctx)       \
 
 // x and y are the arguments in expr
 #define BINARY(name, expr)                                                     \
-value_t ntvm_##name(const value_t* args, uint8_t n, const vm_ctx_t* ctx)       \
+value_t ntvm_##name(const value_t* args, uint8_t n, vm_t* vm)                  \
 {                                                                              \
     assert(n == 2);                                                            \
     CHECK_NUMBER(args[0]);                                                     \
@@ -38,9 +38,9 @@ value_t ntvm_##name(const value_t* args, uint8_t n, const vm_ctx_t* ctx)       \
 }
 
 #define CONSTANT(name, c)                                                      \
-value_t ntvm_##name(const value_t* args, uint8_t n, const vm_ctx_t* ctx)       \
+value_t ntvm_##name(const value_t* args, uint8_t n, vm_t* vm)                  \
 {                                                                              \
-    (void)args; (void)ctx;                                                     \
+    (void)args; (void)vm;                                                      \
     assert(n == 0);                                                            \
     return NUMBER(c);                                                          \
 }
@@ -72,7 +72,7 @@ CONSTANT(e, E)
 CONSTANT(inf, INFINITY)
 CONSTANT(nan, NAN)
 
-value_t ntvm_modf(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
+value_t ntvm_modf(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 1);
     CHECK_NUMBER(args[0]);
@@ -80,7 +80,7 @@ value_t ntvm_modf(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
     double whole = 0;
     double frac = modf(AS_NUMBER(args[0]), &whole);
     value_t parts[] = { NUMBER(frac), NUMBER(whole) };
-    return value_init_tuple(parts, 2, ctx->alloc);  // NULL cell on OOM, see CALL_NATIVE
+    return value_init_tuple(parts, 2, vm->ctx.alloc);  // NULL cell on OOM, see CALL_NATIVE
 }
 
 #undef CONSTANT

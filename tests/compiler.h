@@ -19,7 +19,7 @@
 #define SV_TEST_FIELD(n) sv_test_compiler_val(SV_TEST_RESERVED_FIELDS + (n))
 
 /* compile() reads a file, so the source goes through the scratch file. */
-static inline vm_t sv_test_compiler_compile(const char* src, int64_t max_frames, ctx_t* ctx)
+static inline vm_t sv_test_compiler_compile(const char* src, compile_opts_t opts, ctx_t* ctx)
 {
    FILE* f = fopen(SV_TEST_PATH, "w");
    if (f == NULL)
@@ -27,7 +27,7 @@ static inline vm_t sv_test_compiler_compile(const char* src, int64_t max_frames,
    bool written = fputs(src, f) != EOF;
    if (fclose(f) != 0 || !written)
       return (vm_t){0};
-   return compile(SV_TEST_PATH, (compile_opts_t){ .max_frames = max_frames }, ctx);
+   return compile(SV_TEST_PATH, opts, ctx);
 }
 
 /*
@@ -39,7 +39,7 @@ static inline bool sv_test_compiler_run(const char* src, int64_t max_frames, ctx
                                         sv_opt_t(error_t)* err)
 {
    *ctx = (ctx_t){ .alloc = sv_gpa, .logger = sv_std_logger, .err = error_init() };
-   *vm = sv_test_compiler_compile(src, max_frames, ctx);
+   *vm = sv_test_compiler_compile(src, (compile_opts_t){ .max_frames = max_frames }, ctx);
    if (vm->fn.chunk.bytecode.arr == NULL) {
       error_free(&ctx->err, &sv_gpa);
       return false;
@@ -179,7 +179,7 @@ static inline int sv_test_compiler_runtime_err(const char* src)
 static inline int sv_test_compiler_err(const char* src)
 {
    ctx_t ctx = { .alloc = sv_gpa, .logger = sv_std_logger, .err = error_init() };
-   vm_t vm = sv_test_compiler_compile(src, SV_TEST_MAX_FRAMES, &ctx);
+   vm_t vm = sv_test_compiler_compile(src, (compile_opts_t){ .max_frames = SV_TEST_MAX_FRAMES }, &ctx);
    if (vm.fn.chunk.bytecode.arr != NULL) {
       vm_deinit(&vm);
       return -1;
@@ -192,7 +192,7 @@ static inline int sv_test_compiler_err(const char* src)
 static inline bool sv_test_compiler_err_msg(const char* src, const char* expected)
 {
    ctx_t ctx = { .alloc = sv_gpa, .logger = sv_std_logger, .err = error_init() };
-   vm_t vm = sv_test_compiler_compile(src, SV_TEST_MAX_FRAMES, &ctx);
+   vm_t vm = sv_test_compiler_compile(src, (compile_opts_t){ .max_frames = SV_TEST_MAX_FRAMES }, &ctx);
    if (vm.fn.chunk.bytecode.arr != NULL) {
       vm_deinit(&vm);
       return false;
@@ -433,7 +433,8 @@ static inline void sv_test_compiler_error_messages(sv_testing_t* t)
    /* An error raised through the embedding api reports the callee's definition line, or
     * line 0 when there is no callee to point at. */
    ctx_t ctx = { .alloc = sv_gpa, .logger = sv_std_logger, .err = error_init() };
-   vm_t vm = sv_test_compiler_compile("x = 1\nfun f(y) y\nf(1)", SV_TEST_MAX_FRAMES, &ctx);
+   vm_t vm = sv_test_compiler_compile("x = 1\nfun f(y) y\nf(1)",
+      (compile_opts_t){ .max_frames = SV_TEST_MAX_FRAMES }, &ctx);
    sv_test_run(t, vm.fn.chunk.bytecode.arr != NULL);
    sv_test_run(t, !vm_run(&vm).is_some);
    value_t args[] = { sv_test_compiler_val(1), sv_test_compiler_val(2) };
@@ -446,6 +447,48 @@ static inline void sv_test_compiler_error_messages(sv_testing_t* t)
       sv_str_init("Line 0: Undefined global")));
    value_free(&undefined, &sv_gpa);
    vm_deinit(&vm);
+}
+
+static value_t sv_test_compiler_ntv_apply(const value_t* args, uint8_t n, vm_t* vm)
+{
+   (void)n;
+   return vm_call_value(vm, args[0], &args[1], 1);
+}
+
+/* Runs src with `apply` defined, and compares the text of its result or of its error. */
+static inline bool sv_test_compiler_apply(const char* src, const char* expected)
+{
+   native_fn_t apply = { .arity = 2, .name = "apply", .fn = sv_test_compiler_ntv_apply };
+   compile_opts_t opts = { .max_frames = SV_TEST_MAX_FRAMES, .native_funs = &apply, .native_count = 1 };
+   ctx_t ctx = { .alloc = sv_gpa, .logger = sv_std_logger, .err = error_init() };
+   vm_t vm = sv_test_compiler_compile(src, opts, &ctx);
+   if (vm.fn.chunk.bytecode.arr == NULL) {
+      error_free(&ctx.err, &sv_gpa);
+      return false;
+   }
+   sv_opt_t(error_t) err = vm_run(&vm);
+   bool res = err.is_some || vm.stack.size == 1;
+   if (err.is_some) {
+      res = sv_str_comp(err.value.msg, sv_str_init(expected));
+      error_free(&err.value, &sv_gpa);
+   } else if (res) {
+      sv_str_t text = value_to_str(sv_vec_last(vm.stack), &vm.ctx);
+      res = sv_str_comp(text, sv_str_init(expected));
+      sv_str_deinit(&text, &sv_gpa);
+   }
+   vm_deinit(&vm);
+   return res;
+}
+
+static inline void sv_test_compiler_native_calls(sv_testing_t* t)
+{
+   sv_test_run(t, sv_test_compiler_apply("fun inc(x) x + 1\n1 + apply(inc, 41)", "43"));
+   sv_test_run(t, sv_test_compiler_apply(
+      "fun inc(x) x + 1\nfun twice(x) apply(inc, apply(inc, x))\napply(twice, 1)", "3"));
+   sv_test_run(t, sv_test_compiler_apply("apply(len, [1, 2])", "2"));
+   sv_test_run(t, sv_test_compiler_apply("fun bad(x) x - nil\n\napply(bad, 1)",
+      "Line 1: Invalid operands for '-': number and nil"));
+   sv_test_run(t, sv_test_compiler_apply("\napply(1, 2)", "Line 2: Type is not callable"));
 }
 
 static inline void sv_test_compiler_for(sv_testing_t* t)
@@ -1394,6 +1437,7 @@ static inline void sv_test_compiler(sv_testing_t* t)
    sv_test_compiler_newlines(t);
    sv_test_compiler_errors(t);
    sv_test_compiler_runtime_errors(t);
+   sv_test_compiler_native_calls(t);
    sv_test_compiler_error_messages(t);
    sv_test_compiler_oom(t);
    sv_test_compiler_imports(t);

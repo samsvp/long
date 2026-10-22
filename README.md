@@ -157,7 +157,7 @@ int main(void)
         // get the function index in the vm globals table
         sv_opt_t(uint32_t) fn_idx = globals_get(vm.globals_names_to_index, sv_str_init("my_fun"), script_path, a);
         // and we then call it
-        ret = vm_call(&vm, fn_idx.value, args, 2);
+        ret = vm_call_value(&vm, vm.globals.arr[fn_idx.value], args, 2);
     }
 
     if (IS_ERR(ret)) {

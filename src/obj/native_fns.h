@@ -5,7 +5,7 @@
 #include "../common.h"
 
 typedef struct {
-    value_t (*fn) (const value_t*, uint8_t, const vm_ctx_t*);
+    value_t (*fn) (const value_t*, uint8_t, vm_t*);
     uint8_t arity;
     const char* name;
 } native_fn_t;

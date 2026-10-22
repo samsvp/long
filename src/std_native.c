@@ -26,12 +26,12 @@ value_t bad_arg_type_error(value_t v, value_kind expected_k, obj_kind expected_o
                           ctx->alloc);
 }
 
-value_t ntv_print(const value_t* values, uint8_t n, const vm_ctx_t* ctx)
+value_t ntv_print(const value_t* values, uint8_t n, vm_t* vm)
 {
     assert(n == 1);
 
     value_t v = values[0];
-    sv_str_t str = !IS_STR(v) ? value_to_str(v, ctx) : AS_STR(v);
+    sv_str_t str = !IS_STR(v) ? value_to_str(v, &vm->ctx) : AS_STR(v);
     printf("%.*s", (int)str.size, str.chars);
 
     if (!IS_STR(v))
@@ -40,39 +40,39 @@ value_t ntv_print(const value_t* values, uint8_t n, const vm_ctx_t* ctx)
     return value_nil;
 }
 
-value_t ntv_println(const value_t* values, uint8_t n, const vm_ctx_t* ctx)
+value_t ntv_println(const value_t* values, uint8_t n, vm_t* vm)
 {
     assert(n == 1);
 
-    value_t ret = ntv_print(values, n, ctx);
+    value_t ret = ntv_print(values, n, vm);
     printf("\n");
     return ret;
 }
 
-value_t ntv_print_arr(const value_t* values, uint8_t n, const vm_ctx_t* ctx)
+value_t ntv_print_arr(const value_t* values, uint8_t n, vm_t* vm)
 {
     assert(n == 1);
 
     value_t maybe_list = values[0];
     if (!IS_LIST(maybe_list))
-        return bad_arg_type_error(maybe_list, VALUE_OBJ, OBJ_LIST, ctx);
+        return bad_arg_type_error(maybe_list, VALUE_OBJ, OBJ_LIST, &vm->ctx);
 
     ll_iter_t iter = ll_iter_init_no_borrow(AS_LIST(maybe_list));
     for (sv_opt_t(value_t) v = ll_iter_next(&iter); v.is_some; v = ll_iter_next(&iter)) {
-        ntv_print(&v.value, 1, ctx);
+        ntv_print(&v.value, 1, vm);
     }
 
     return value_nil;
 }
 
-value_t ntv_len(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
+value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 1);
 
     value_t v = args[0];
 
     if (!IS_LIST(v) && !IS_STR(v) && !IS_MAP(v) && !IS_ITER(v))
-        return bad_arg_type_error(v, VALUE_OBJ, OBJ_ITER, ctx);
+        return bad_arg_type_error(v, VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
     value_t ret = { .kind = VALUE_NUMBER, .number = 0 };
 
@@ -88,7 +88,7 @@ value_t ntv_len(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
         break;
     case OBJ_ITER: {
         iter_t iter = AS_ITER(v);
-        while (!IS_NIL(iter_next(&iter, ctx->alloc)))
+        while (!IS_NIL(iter_next(&iter, vm->ctx.alloc)))
             ret.number++;
         break;
     }
@@ -115,9 +115,9 @@ value_t ntv_len(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
     value_t min = args[0];                                                     \
     value_t max = args[1];                                                     \
     if (!IS_NUMBER(min))                                                       \
-        return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, ctx);           \
+        return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, &vm->ctx);      \
     if (!IS_NUMBER(max))                                                       \
-        return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, ctx);           \
+        return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, &vm->ctx);      \
     if (min.number > max.number)                                               \
         return value_nil;                                                      \
     double range = fabs(max.number - min.number);                              \
@@ -125,10 +125,10 @@ value_t ntv_len(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
     return (value_t){ .number = res, .kind = VALUE_NUMBER };                   \
 } while (0)
 
-value_t ntv_randi(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
+value_t ntv_randi(const value_t* args, uint8_t n, vm_t* vm)
 { RAND(rand() % (int)range + (int)min.number); }
 
-value_t ntv_randf(const value_t* args, uint8_t n, const vm_ctx_t* ctx)
+value_t ntv_randf(const value_t* args, uint8_t n, vm_t* vm)
 { RAND((double)rand()/(double)(RAND_MAX/range) + min.number); }
 
 #undef RAND
