@@ -3,6 +3,13 @@
 
 #include "../common.h"
 
+#define NUMBER(x) (value_t){ .kind = VALUE_NUMBER, .number = (x) }
+
+#define CHECK_NUMBER(v) do {                                                   \
+    if (!IS_NUMBER(v))                                                         \
+        return bad_arg_type_error(v, VALUE_NUMBER, OBJ_LIST, &vm->ctx);        \
+} while (0)
+
 /**
  * sin(x) Sine of x (measured in radians)
  */

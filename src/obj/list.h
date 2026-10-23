@@ -112,8 +112,7 @@ typedef struct {
 } ll_iter_t;
 
 /**
- * Initializes an iterator viewing the list without borrowing it. The list
- * must outlive the iterator; no deinit is needed.
+ * Initializes an iterator viewing the list without borrowing it.
  */
 ll_iter_t ll_iter_init_no_borrow(list_t);
 /**

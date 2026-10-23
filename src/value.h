@@ -37,6 +37,7 @@ typedef struct value_t {
 #define IS_NUMBER(v) ((v).kind == VALUE_NUMBER)
 #define IS_ATOM(v) ((v).kind == VALUE_ATOM)
 #define IS_NIL(v) ((v).kind == VALUE_NIL)
+#define IS_FALSEY(v) ((v).kind == VALUE_NIL || ( IS_BOOL((v)) && !AS_BOOL((v)) ) )
 #define IS_BOOL(v) ((v).kind == VALUE_BOOL)
 #define IS_C(v) ((v).kind == VALUE_C)
 #define IS_STR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_STR)

@@ -8,13 +8,6 @@
 static const double PI = 3.14159265358979323846;
 static const double E = 2.71828182845904523536;
 
-#define NUMBER(x) (value_t){ .kind = VALUE_NUMBER, .number = (x) }
-
-#define CHECK_NUMBER(v) do {                                                   \
-    if (!IS_NUMBER(v))                                                         \
-        return bad_arg_type_error(v, VALUE_NUMBER, OBJ_LIST, &vm->ctx);        \
-} while (0)
-
 // x is the argument in expr
 #define UNARY(name, expr)                                                      \
 value_t ntvm_##name(const value_t* args, uint8_t n, vm_t* vm)                  \

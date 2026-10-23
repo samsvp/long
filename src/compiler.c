@@ -1,3 +1,4 @@
+#include "modules/list.h"
 #include "modules/math.h"
 #define SV_ARENA_IMPLEMENTATION
 #include "std/arena.h"
@@ -1703,8 +1704,21 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 0, .name = "inf", .fn = ntvm_inf },
         { .arity = 0, .name = "nan", .fn = ntvm_nan },
     };
+    native_fn_t list_fns[] = {
+        { .arity = 2, .name = "map", .fn = ntvl_map },
+        { .arity = 2, .name = "filter", .fn = ntvl_filter },
+        { .arity = 3, .name = "reduce", .fn = ntvl_reduce },
+        { .arity = 2, .name = "imap", .fn = ntvl_imap },
+        { .arity = 2, .name = "ifilter", .fn = ntvl_ifilter },
+        { .arity = 3, .name = "ireduce", .fn = ntvl_ireduce },
+        { .arity = 2, .name = "zip", .fn = ntvl_zip },
+        { .arity = 1, .name = "shuffle", .fn = ntvl_shuffle },
+        { .arity = 2, .name = "take", .fn = ntvl_take },
+        { .arity = 2, .name = "skip", .fn = ntvl_skip },
+    };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },
+        { .name = "list", .native_fns = list_fns, .native_count = sizeof(list_fns) / sizeof(list_fns[0]) },
     };
     for (size_t i = 0; i < sizeof(native_fns) / sizeof(native_fns[0]); i++)
         add_native_fn(c, native_fns[i], empty, ctx);

@@ -47,4 +47,24 @@ import list("std/ll.long")
 |> list::take(2)
 |> println()
 
-fun 1(x) do x end
+import list("list")
+
+fun rev(lst) do
+    fun rev(lst, acc) match lst
+    | [] do acc
+    | [head, ..tail] do rev(tail, [ head, ..acc ])
+    end
+
+    rev(lst, [])
+end
+
+list::map([1, 2, 3], fun (x) 3 * x)
+|> println()
+
+list::zip([1, 2, 3], [4, 5, 6])
+|> println()
+
+list::zip([1, 2, 3, 5], [4, 5, 6, 8])
+|> list::shuffle()
+|> list::take(2)
+|> println()

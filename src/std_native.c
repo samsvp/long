@@ -18,6 +18,14 @@
     static int initialized = true;
 #endif
 
+void init_rand(void)
+{
+    if (!initialized) {
+        srand(time(NULL));
+        initialized = true;
+    }
+}
+
 value_t bad_arg_type_error(value_t v, value_kind expected_k, obj_kind expected_o, const vm_ctx_t* ctx)
 {
     return value_init_err(error_fmt(VM_ERR_WRONG_TYPE, ctx->line, ctx->alloc,
@@ -107,11 +115,8 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
 
 
 #define RAND(formula) do {                                                     \
-    if (!initialized) {                                                        \
-        srand(time(NULL));                                                     \
-        initialized = true;                                                    \
-    }                                                                          \
     assert(n == 2);                                                            \
+    init_rand();                                                               \
     value_t min = args[0];                                                     \
     value_t max = args[1];                                                     \
     if (!IS_NUMBER(min))                                                       \
