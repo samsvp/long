@@ -1,0 +1,44 @@
+import list("list")
+
+card = { suit: :heart, value: 10 }
+
+fun is_flush(hand) do
+    candidate =
+        hand
+        |> list::group_by(fun (c) c.suit)
+        |> list::max_by(len)
+
+    if candidate |> len() >= 5 do
+        candidate
+    end
+end
+
+fun is_straight(hand) do
+    hand =
+        hand
+        |> list::sort_by(fun (c) c.value)
+        |> list::rev()
+
+    fun is_straight(acc, hand)
+    | (acc, _) when len(acc) == 5 do acc
+    | (_, lst) when len(lst) < 5 do nil
+    | ([], [fst, ..tail]) do
+        snd = tail[0]
+        if fst - 1 == snd do [snd, fst] else [] end
+        |> is_straight(tail)
+    | (acc, [fst, ..tail]) do
+        if fst - 1 == tail[0] do [fst, ..acc] else [] end
+        |> is_straight(tail)
+    end
+
+    is_straight([], hand)
+end
+
+fun is_straight_flush(hand)
+    # hand |> is_flush() |?> is_straight()
+    if flush = hand |> is_flush() do
+        is_straight(flush)
+    end
+
+fun calc_hand(hand) do
+end
