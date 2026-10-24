@@ -8,6 +8,7 @@
 #include "../std/option.h"
 #include "../common.h"
 #include "../value.h"
+#include "iterable.h"
 
 typedef struct {
     value_t key;
@@ -121,6 +122,7 @@ void map_iter_deinit(map_iter_t*, const sv_allocator_t*);
  * Next (non borrowed) kv value.
  */
 sv_opt_t(kv_t) map_iter_next(map_iter_t*);
+iterable_t map_iterable_init(map_iter_t*);
 
 /**
  * Initializes an iterator viewing the transient hashmap; no deinit is

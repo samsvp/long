@@ -616,6 +616,48 @@ sv_opt_t(kv_t) map_iter_next(map_iter_t* it)
     return sv_opt_some_t(kv_t, kv);
 }
 
+#define FIELD_KEY 0
+#define FIELD_VALUE 1
+
+static int64_t iterable_map_len(const void* self)
+{
+    map_iter_t copy = *(const map_iter_t*)self;
+    int64_t n = 0;
+    while (map_iter_next(&copy).is_some)
+        n++;
+    return n;
+}
+
+static sv_opt_t(value_t) iterable_map_next(void* self, const sv_allocator_t* a)
+{
+    sv_opt_t(kv_t) kv = map_iter_next(self);
+    if (!kv.is_some)
+        return sv_opt_none_t(value_t);
+
+    const value_t pair[4] = {
+        { .kind = VALUE_NUMBER, .number = FIELD_KEY }, kv.value.key,
+        { .kind = VALUE_NUMBER, .number = FIELD_VALUE }, kv.value.value,
+    };
+    return sv_opt_some_t(value_t, value_init_record(pair, 2, a));
+}
+
+static void iterable_map_deinit(void* self, const sv_allocator_t* a)
+{
+    map_iter_deinit(self, a);
+}
+
+static const iterable_vtable_t map_iterable_vtable = {
+    .name = "map iterator",
+    .len = iterable_map_len,
+    .next = iterable_map_next,
+    .deinit = iterable_map_deinit,
+};
+
+iterable_t map_iterable_init(map_iter_t* it)
+{
+    return (iterable_t){ .vtable = &map_iterable_vtable, .self = it };
+}
+
 map_iter_t thm_iter_init(transient_hashmap_t t)
 {
     return iter_init_node(t);

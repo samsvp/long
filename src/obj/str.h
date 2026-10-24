@@ -5,6 +5,7 @@
 #include "../common.h"
 #include "../std/string.h"
 #include "../std/allocator.h"
+#include "iterable.h"
 
 typedef struct {
     sv_str_t* str;
@@ -27,6 +28,7 @@ void str_iter_deinit(str_iter_t*, const sv_allocator_t*);
  * exhausted. obj.cell is NULL on allocation failure.
  */
 value_t str_iter_next(str_iter_t*, const sv_allocator_t*);
+iterable_t str_iterable_init(str_iter_t*);
 
 /**
  * Number of unicode characters in the string.

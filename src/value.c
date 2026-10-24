@@ -201,7 +201,9 @@ value_t value_init_native(native_fn_t fn, const sv_allocator_t* a)
 
 value_t value_init_iter(value_t from, const sv_allocator_t* a)
 {
-    iter_t iter = iter_init(from);
+    iterable_t iter = iter_init(from, a);
+    if (iter.self == NULL)
+        return ERR_VALUE;
     value_t v = obj_wrap((obj_t){ .kind = OBJ_ITER, .iter = iter }, a);
     if (v.obj.cell == NULL)
         iter_deinit(&iter, a);
@@ -398,13 +400,10 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
                 CHECK(sv_strb_add(b, ",", 1, a) >= 0);
             return sv_strb_add(b, ")", 1, a) >= 0;
         }
-        case OBJ_ITER:
-            switch (AS_ITER(v).kind) {
-                case ITER_LIST: return sv_strb_add(b, "list iterator", 13, a) >= 0;
-                case ITER_STR: return sv_strb_add(b, "string iterator", 15, a) >= 0;
-                case ITER_MAP: return sv_strb_add(b, "map iterator", 12, a) >= 0;
-            }
-            return false;
+        case OBJ_ITER: {
+            const char* name = AS_ITER(v).vtable->name;
+            return sv_strb_add(b, name, (int64_t)strlen(name), a) >= 0;
+        }
         case OBJ_CLOSURE: {
             sv_str_t name = cls_get_vm(v.obj.cell->value.closure)->name;
             return sv_strb_add(b, name.chars, name.size, a) >= 0;

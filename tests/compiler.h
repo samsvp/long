@@ -550,9 +550,9 @@ static inline void sv_test_compiler_for_map(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num(
       "for {key: (a, b), value} in %{(1, 2): 9} do a + b + value end", 12));
 
-   /* A `for` stops on a falsey item, but the record wrapper is always truthy. */
+   /* A `for` keeps going over falsey items. */
    sv_test_run(t, sv_test_compiler_num("for {key, value} in %{\"a\": nil} do 7 end", 7));
-   sv_test_run(t, sv_test_compiler_num("for a in [1, nil, 3] do a end", 1));
+   sv_test_run(t, sv_test_compiler_num("for a in [1, nil, 3] do a end", 3));
 
    /* The record is closed at two fields, so naming one of them needs `..`. */
    sv_test_run(t, sv_test_compiler_num("for {value, ..} in %{\"a\": 5} do value end", 5));

@@ -6,7 +6,6 @@
 #include "common.h"
 #include "value.h"
 #include "error.h"
-#include "obj/iterator.h"
 #include "obj/closure.h"
 #include "obj/native_fns.h"
 #include "obj/record.h"
@@ -35,7 +34,7 @@ typedef struct obj_t {
         tuple_t tuple;
         list_t list;
         hashmap_t map;
-        iter_t iter;
+        iterable_t iter;
         native_fn_t fn;
         closure_t closure;
         closure_member_t closure_member;

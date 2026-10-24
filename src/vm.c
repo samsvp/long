@@ -639,11 +639,14 @@ break; }
             if (!IS_ITER(v))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v, a),
                       "Type is not an iterator: %s", TYPE_NAME(v));
-            value_t res = iter_next(&AS_ITER(v), a);
+            sv_opt_t(value_t) next = iterable_next(&AS_ITER(v), a);
             value_free(&v, a);
-            TRY_OR(!(res.kind == VALUE_OBJ && res.obj.cell == NULL), (void)0,
-                   "when advancing iterator");
-            TRY_PUSH_OWNED(res);
+            TRY_OR(!next.is_some || next.value.kind != VALUE_OBJ || next.value.obj.cell != NULL,
+                   (void)0, "when advancing iterator");
+            value_t has = { .kind = VALUE_BOOL, .boolean = next.is_some };
+            value_t item = next.is_some ? next.value : value_nil;
+            TRY_PUSH_STACK(has);
+            TRY_PUSH_OWNED(item);
             break;
         }
         case OP_LOAD_CLOSURE: {

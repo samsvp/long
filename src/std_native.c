@@ -94,12 +94,9 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
     case OBJ_MAP:
         ret.number = map_count(AS_MAP(v));
         break;
-    case OBJ_ITER: {
-        iter_t iter = AS_ITER(v);
-        while (!IS_NIL(iter_next(&iter, vm->ctx.alloc)))
-            ret.number++;
+    case OBJ_ITER:
+        ret.number = (double)iterable_len(&AS_ITER(v));
         break;
-    }
     case OBJ_TUPLE:
     case OBJ_ERR:
     case OBJ_RECORD:

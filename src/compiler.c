@@ -914,7 +914,6 @@ static void compile_if(compiler_t* c, const sexpr_t* args, int64_t n, int64_t li
     sv_str_t id = destructure ? sv_str_init(" $item ") : expect_id(binding[0], ctx);                          \
     emit(c, ctx, OP_SET_LOCAL, line);                                                                         \
     uint32_t id_slot = locals_add(c->locals, id, ctx, line);                                                  \
-    emit_wide(c, ctx, OP_GET_LOCAL, id_slot, line);                                                           \
                                                                                                               \
     int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc), line)
 

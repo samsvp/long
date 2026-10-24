@@ -5,6 +5,7 @@
 #include "../std/vector.h"
 #include "../std/option.h"
 #include "../common.h"
+#include "iterable.h"
 
 typedef struct node_t node_t;
 
@@ -127,5 +128,6 @@ void ll_iter_deinit(ll_iter_t*, const sv_allocator_t*);
  * Next (non borrowed) value.
  */
 sv_opt_t(value_t) ll_iter_next(ll_iter_t*);
+iterable_t ll_iterable_init(ll_iter_t*);
 
 #endif

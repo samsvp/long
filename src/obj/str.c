@@ -40,6 +40,35 @@ value_t str_iter_next(str_iter_t* it, const sv_allocator_t* a)
     return value_init_str(slice, a);
 }
 
+static int64_t iterable_str_len(const void* self)
+{
+    const str_iter_t* it = self;
+    return str_count(sv_str_slice(*it->str, it->i, it->str->size));
+}
+
+static sv_opt_t(value_t) iterable_str_next(void* self, const sv_allocator_t* a)
+{
+    value_t c = str_iter_next(self, a);
+    return IS_NIL(c) ? sv_opt_none_t(value_t) : sv_opt_some_t(value_t, c);
+}
+
+static void iterable_str_deinit(void* self, const sv_allocator_t* a)
+{
+    str_iter_deinit(self, a);
+}
+
+static const iterable_vtable_t str_iterable_vtable = {
+    .name = "string iterator",
+    .len = iterable_str_len,
+    .next = iterable_str_next,
+    .deinit = iterable_str_deinit,
+};
+
+iterable_t str_iterable_init(str_iter_t* it)
+{
+    return (iterable_t){ .vtable = &str_iterable_vtable, .self = it };
+}
+
 int64_t str_count(sv_str_t s)
 {
     int64_t n = 0;

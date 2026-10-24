@@ -441,3 +441,34 @@ sv_opt_t(value_t) ll_iter_next(ll_iter_t* it)
     }
     return sv_opt_some_t(value_t, v);
 }
+
+static int64_t iterable_ll_len(const void* self)
+{
+    const ll_iter_t* it = self;
+    node_t node = it->node.cell->value;
+    return node.len == 0 ? 0 : it->index - node.start + 1 + ll_count(node.tail);
+}
+
+static sv_opt_t(value_t) iterable_ll_next(void* self, const sv_allocator_t* a)
+{
+    (void)a;
+    sv_opt_t(value_t) v = ll_iter_next(self);
+    return v.is_some ? sv_opt_some_t(value_t, value_borrow(v.value)) : v;
+}
+
+static void iterable_ll_deinit(void* self, const sv_allocator_t* a)
+{
+    ll_iter_deinit(self, a);
+}
+
+static const iterable_vtable_t ll_iterable_vtable = {
+    .name = "list iterator",
+    .len = iterable_ll_len,
+    .next = iterable_ll_next,
+    .deinit = iterable_ll_deinit,
+};
+
+iterable_t ll_iterable_init(ll_iter_t* it)
+{
+    return (iterable_t){ .vtable = &ll_iterable_vtable, .self = it };
+}
