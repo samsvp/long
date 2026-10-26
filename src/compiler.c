@@ -1106,8 +1106,8 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
             : expect_id(params->cons.arr[i], ctx);
         locals_add(fc->locals, p, ctx, line);
     }
-    if (name.size > 0)
-        locals_add(fc->locals, name, ctx, line);
+    // the VM stores the callee in the slot after the arguments
+    locals_add(fc->locals, name.size > 0 ? name : sv_str_init(" self "), ctx, line);
 
     for (int64_t i = 0; i < params->cons.size; i++) {
         if (params->cons.arr[i].tag != S_CONS)
@@ -1669,6 +1669,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
 
     native_fn_t native_fns[] = {
         { .arity = 1, .name = "len", .fn = ntv_len },
+        { .arity = 1, .name = "int", .fn = ntv_int },
         { .arity = 1, .name = "print", .fn = ntv_print },
         { .arity = 1, .name = "println", .fn = ntv_println },
         { .arity = 1, .name = "print_vals", .fn = ntv_print_arr },
@@ -1712,6 +1713,11 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 3, .name = "ireduce", .fn = ntvl_ireduce },
         { .arity = 2, .name = "zip", .fn = ntvl_zip },
         { .arity = 1, .name = "shuffle", .fn = ntvl_shuffle },
+        { .arity = 3, .name = "map_window", .fn = ntvl_map_window },
+        { .arity = 3, .name = "mapf_window", .fn = ntvl_mapf_window },
+        { .arity = 1, .name = "sort", .fn = ntvl_sort },
+        { .arity = 2, .name = "sort_by", .fn = ntvl_sort_by },
+        { .arity = 2, .name = "all", .fn = ntvl_all },
         { .arity = 2, .name = "take", .fn = ntvl_take },
         { .arity = 2, .name = "skip", .fn = ntvl_skip },
     };

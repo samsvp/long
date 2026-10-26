@@ -39,5 +39,9 @@ value_t ntv_randf(const value_t*, uint8_t, vm_t*);
  * This seeds srand with time(NULL). Define RAND_SEED_DEFINED to skip srand initialization.
  */
 value_t ntv_randi(const value_t*, uint8_t, vm_t*);
+/**
+ * Returns the value as an int
+ */
+value_t ntv_int(const value_t*, uint8_t, vm_t*);
 
 #endif

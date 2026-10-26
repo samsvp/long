@@ -1,6 +1,5 @@
 #include "std_native.h"
 
-#include "obj/iterator.h"
 #include "value.h"
 #include "std/allocator_std.h"
 #include "obj/list.h"
@@ -132,5 +131,17 @@ value_t ntv_randi(const value_t* args, uint8_t n, vm_t* vm)
 
 value_t ntv_randf(const value_t* args, uint8_t n, vm_t* vm)
 { RAND((double)rand()/(double)(RAND_MAX/range) + min.number); }
+
+value_t ntv_int(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    value_t x = args[0];
+    if (IS_NUMBER(x))
+        return (value_t){ .kind = VALUE_NUMBER, .number = floor(AS_NUMBER(x)) };
+    if (IS_ATOM(x))
+        return (value_t){ .kind = VALUE_NUMBER, .number = x.number };
+    return bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, &vm->ctx);
+}
 
 #undef RAND

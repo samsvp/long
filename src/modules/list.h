@@ -43,5 +43,25 @@ value_t ntvl_take(const value_t*, uint8_t, vm_t*);
  * skip(lst, n): skips the first n elements from n.
  */
 value_t ntvl_skip(const value_t*, uint8_t, vm_t*);
+/**
+ * map_window(lst, f, window_len): applies f to successive windows of lst.
+ */
+value_t ntvl_map_window(const value_t*, uint8_t, vm_t*);
+/**
+ * mapf_window(lst, f, window_len): applies f to successive windows of lst, filtering falsey results.
+ */
+value_t ntvl_mapf_window(const value_t*, uint8_t, vm_t*);
+/**
+ * sort(lst): returns a sorted list.
+ */
+value_t ntvl_sort(const value_t*, uint8_t, vm_t*);
+/**
+ * sort_by(lst, f): returns a sorted list applying f as a comparison function.
+ */
+value_t ntvl_sort_by(const value_t*, uint8_t, vm_t*);
+/**
+ * all_by(lst, f): returns true if the all elements of the list satisfies f.
+ */
+value_t ntvl_all(const value_t*, uint8_t, vm_t*);
 
 #endif
