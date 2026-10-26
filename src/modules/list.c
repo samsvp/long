@@ -6,6 +6,7 @@
 #include "../obj/iterator.h"
 #include "../obj/iterable.h"
 #include "math.h"
+#include "../stable_sort.h"
 #include <math.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -162,7 +163,7 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
 }
 
 static value_t map_window(value_t val, value_t f, value_t window_len,
-                          bool should_filter, vm_t* vm)
+                          bool should_map, bool should_filter, vm_t* vm)
 {
     CHECK_LIST(val);
     CHECK_NUMBER(window_len);
@@ -197,13 +198,17 @@ static value_t map_window(value_t val, value_t f, value_t window_len,
         CHECK_OOM(vslice.obj.cell);
 
         value_t ret = vm_call_value(vm, f, &vslice, 1);
-        value_free(&vslice, vm->ctx.alloc);
+        if (should_map)
+            value_free(&vslice, vm->ctx.alloc);
 
-        if (should_filter && IS_FALSEY(ret))
+        if (should_filter && IS_FALSEY(ret)) {
+            if (!should_map)
+                value_free(&vslice, vm->ctx.alloc);
             continue;
+        }
 
         UNWRAP_ERR(ret);
-        vec.arr[size - ++current_index] = ret;
+        vec.arr[size - ++current_index] = should_map ? ret : vslice;
     }
     vec.size = current_index;
     if (vec.size < size)
@@ -216,13 +221,19 @@ static value_t map_window(value_t val, value_t f, value_t window_len,
 value_t ntvl_map_window(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 3);
-    return map_window(args[0], args[1], args[2], false, vm);
+    return map_window(args[0], args[1], args[2], true, false, vm);
 }
 
 value_t ntvl_mapf_window(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 3);
-    return map_window(args[0], args[1], args[2], true, vm);
+    return map_window(args[0], args[1], args[2], true, true, vm);
+}
+
+value_t ntvl_filter_window(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 3);
+    return map_window(args[0], args[1], args[2], false, true, vm);
 }
 
 value_t ntvl_shuffle(const value_t* args, uint8_t n, vm_t* vm)
@@ -289,10 +300,40 @@ value_t ntvl_skip(const value_t* args, uint8_t n, vm_t* vm)
     return ret;
 }
 
-static int value_num_cmp(const void* a, const void* b)
+static int value_num_cmp(void* ctx, const void* a, const void* b)
 {
+    (void)ctx;
     double x = ((const value_t*)a)->number;
     double y = ((const value_t*)b)->number;
+    return (x < y) - (x > y);
+}
+
+typedef struct {
+    vm_t* vm;
+    value_t f;
+    sv_opt_t(error_t) err;
+} sort_ctx_t;
+
+static int keyed_cmp(void* mctx, const void* a, const void* b)
+{
+    sort_ctx_t* ctx = mctx;
+    value_t ta = vm_call_value(ctx->vm, ctx->f, a, 1);
+    value_t tb = vm_call_value(ctx->vm, ctx->f, b, 1);
+    if (IS_ERR(ta))
+        ctx->err = sv_opt_some_t(error_t, AS_ERR(ta));
+    if (IS_ERR(tb))
+        ctx->err = sv_opt_some_t(error_t, AS_ERR(tb));
+    if (ctx->err.is_some)
+        return 0;
+
+    if (!IS_NUMBER(ta) || !IS_NUMBER(tb)) {
+        value_t x = IS_NUMBER(ta) ? tb : ta;
+        error_t err = AS_ERR(bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, &ctx->vm->ctx));
+        ctx->err = sv_opt_some_t(error_t, err);
+    }
+
+    double x = AS_NUMBER(ta);
+    double y = AS_NUMBER(tb);
     return (x < y) - (x > y);
 }
 
@@ -309,19 +350,16 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
     ll_iter_t iter = ll_iter_init_no_borrow(l);
     sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
-        value_t x = maybe_x.value;
-        value_t ret = f == NULL ? x : vm_call_value(vm, *f, &x, 1);
-        UNWRAP_ERR(ret);
-        if (!IS_NUMBER(ret)) {
-            sv_vec_deinit(&vs, vm->ctx.alloc);
-            value_free(&ret, vm->ctx.alloc);
-            return bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, &vm->ctx);                                          \
-        }
-        value_free(&ret, vm->ctx.alloc);
+        value_t x = value_borrow(maybe_x.value);
         vs.arr[vs.size++] = x;
     }
 
-    qsort(vs.arr, vs.size, sizeof(value_t), value_num_cmp);
+    sort_ctx_t ctx = {
+        .vm = vm,
+        .f = *f,
+        .err = sv_opt_none,
+    };
+    stable_sort(vs.arr, vs.size, sizeof(value_t), &ctx, f == NULL ? value_num_cmp : keyed_cmp);
     return value_from_list(vs, vm);
 }
 
@@ -334,7 +372,6 @@ value_t ntvl_sort(const value_t* args, uint8_t n, vm_t* vm)
 value_t ntvl_sort_by(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
-
     return sort(args[0], &args[1], vm);
 }
 

@@ -3,37 +3,44 @@ import list("list")
 fun is_flush(hand)
     hand
     |> list::sort_by(fun (c) c.suit |> int())
-    |> list::mapf_window(
+    |> list::filter_window(
         fun ([x, ..tail] = cards)
-            if list::all(tail, fun [x](c) c.suit == x.suit) do
-                cards
-            end,
-        5)
+            list::all(tail, fun [x](c) c.suit == x.suit)
+        , 5)
 
 fun is_straight(hand) do
     hand
-    |> list::sort_by(fun (c) c.value)
-    |> list::mapf_window(
-        fun (cards)
-            cards
-            |> list::map_window(
-                cards
-                , fun ([x, y]) y - x
-                , 2)
-            |> list::all(fun (x) x == 1)
+    |> list::sort_by(fun (c) c.rank)
+    |> list::filter_window(
+        fun ([x1, x2, x3, x4, x5])
+            x1.rank == x2.rank - 1 and
+            x2.rank == x3.rank - 1 and
+            x3.rank == x4.rank - 1 and
+            x4.rank == x5.rank - 1
         , 5)
 end
 
+fun is_straight_flush(hand)
+    hand |> is_flush() |> list::map(is_straight)
+
 hand = [
-      { suit: :spades, value: 10 }
-    , { suit: :heart, value: 9 }
-    , { suit: :heart, value: 8 }
-    , { suit: :heart, value: 7 }
-    , { suit: :heart, value: 6 }
+      { suit: :spades, rank: 10 }
+    , { suit: :spades, rank: 5 }
+    , { suit: :spades, rank: 8 }
+    , { suit: :spades, rank: 4 }
+    , { suit: :spades, rank: 1 }
+    , { suit: :heart, rank: 9 }
+    , { suit: :heart, rank: 8 }
+    , { suit: :heart, rank: 7 }
+    , { suit: :heart, rank: 6 }
+    , { suit: :heart, rank: 10 }
 ]
 
 is_flush(hand)
 |> println()
 
 is_straight(hand)
+|> println()
+
+is_straight_flush(hand)
 |> println()

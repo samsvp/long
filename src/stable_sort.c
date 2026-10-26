@@ -14,19 +14,19 @@ static void swap_items(char* a, char* b, size_t size)
 }
 
 static void insertion_sort(char* items, size_t nmemb, size_t size,
-                           int (*compar)(const void*, const void*))
+                           void* ctx, int (*compar)(void*, const void*, const void*))
 {
     for (size_t i = 1; i < nmemb; i++) {
-        for (size_t j = i; j > 0 && compar(items + (j - 1) * size, items + j * size) > 0; j--)
+        for (size_t j = i; j > 0 && compar(ctx, items + (j - 1) * size, items + j * size) > 0; j--)
             swap_items(items + (j - 1) * size, items + j * size, size);
     }
 }
 
 static void merge(char* dst, const char* a, size_t na, const char* b, size_t nb, size_t size,
-                  int (*compar)(const void*, const void*))
+                  void* ctx, int (*compar)(void*, const void*, const void*))
 {
     while (na > 0 && nb > 0) {
-        if (compar(a, b) <= 0) {
+        if (compar(ctx, a, b) <= 0) {
             memcpy(dst, a, size);
             a += size;
             na--;
@@ -42,23 +42,24 @@ static void merge(char* dst, const char* a, size_t na, const char* b, size_t nb,
     memcpy(dst + na * size, b, nb * size);
 }
 
-void stable_sort(void* base, size_t nmemb, size_t size, int (*compar)(const void*, const void*))
+void stable_sort(void* base, size_t nmemb, size_t size,
+                 void* ctx, int (*compar)(void*, const void*, const void*))
 {
     char* items = base;
     if (nmemb <= STABLE_SORT_RUN) {
-        insertion_sort(items, nmemb, size, compar);
+        insertion_sort(items, nmemb, size, ctx, compar);
         return;
     }
 
     char* buf = malloc(nmemb * size);
     if (buf == NULL) {
-        insertion_sort(items, nmemb, size, compar);
+        insertion_sort(items, nmemb, size, ctx, compar);
         return;
     }
 
     for (size_t i = 0; i < nmemb; i += STABLE_SORT_RUN) {
         size_t n = nmemb - i > STABLE_SORT_RUN ? STABLE_SORT_RUN : nmemb - i;
-        insertion_sort(items + i * size, n, size, compar);
+        insertion_sort(items + i * size, n, size, ctx, compar);
     }
 
     char* from = items;
@@ -68,7 +69,7 @@ void stable_sort(void* base, size_t nmemb, size_t size, int (*compar)(const void
             size_t mid = nmemb - i > width ? i + width : nmemb;
             size_t hi = nmemb - i > 2 * width ? i + 2 * width : nmemb;
             merge(to + i * size, from + i * size, mid - i, from + mid * size, hi - mid,
-                  size, compar);
+                  size, ctx, compar);
         }
 
         char* swap = from;

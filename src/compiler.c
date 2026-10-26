@@ -1715,6 +1715,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 1, .name = "shuffle", .fn = ntvl_shuffle },
         { .arity = 3, .name = "map_window", .fn = ntvl_map_window },
         { .arity = 3, .name = "mapf_window", .fn = ntvl_mapf_window },
+        { .arity = 3, .name = "filter_window", .fn = ntvl_filter_window },
         { .arity = 1, .name = "sort", .fn = ntvl_sort },
         { .arity = 2, .name = "sort_by", .fn = ntvl_sort_by },
         { .arity = 2, .name = "all", .fn = ntvl_all },

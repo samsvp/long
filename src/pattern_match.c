@@ -180,7 +180,8 @@ static bool literal_eql(literal_t a, literal_t b)
 
 #define AS_LITERAL(v) (v).atom.literal
 #define AS_FN(v) (v).cons.arr[0].atom.fn
-static int group_cmp(const void* a, const void* b) {
+static int group_cmp(void* ctx, const void* a, const void* b) {
+    (void)ctx;
     sexpr_t sa = ((const sexpr_t*)a)->cons.arr[1];
     sexpr_t sb = ((const sexpr_t*)b)->cons.arr[1];
 
@@ -299,13 +300,13 @@ static void group(cons_t* match_ptr)
     for(; current < match_ptr->size; current++) {
         sexpr_t p = match_ptr->arr[current].cons.arr[1];
         if (p.tag == S_ATOM && p.atom.literal.kind == LITERAL_IDENTIFIER) {
-            stable_sort(&match_ptr->arr[start], current - start, sizeof(sexpr_t), group_cmp);
+            stable_sort(&match_ptr->arr[start], current - start, sizeof(sexpr_t), NULL, group_cmp);
             start = current + 1;
         }
     }
 
     if (start != current)
-        stable_sort(&match_ptr->arr[start], current - start, sizeof(sexpr_t), group_cmp);
+        stable_sort(&match_ptr->arr[start], current - start, sizeof(sexpr_t), NULL, group_cmp);
 }
 
 /**
@@ -340,8 +341,9 @@ static void fuse_tuple_rows(cons_t* lower)
     }
 }
 
-static int tuple_cmp(const void* a, const void* b)
+static int tuple_cmp(void* ctx, const void* a, const void* b)
 {
+    (void)ctx;
     cons_t sa = ((const sexpr_t*)a)->cons.arr[1].cons;
     cons_t sb = ((const sexpr_t*)b)->cons.arr[1].cons;
 
@@ -357,7 +359,7 @@ static int group_tuple(cons_t match, int start)
             break;
     }
 
-    stable_sort(&match.arr[start], current - start, sizeof(sexpr_t), tuple_cmp);
+    stable_sort(&match.arr[start], current - start, sizeof(sexpr_t), NULL, tuple_cmp);
     return current;
 }
 

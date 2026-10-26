@@ -52,6 +52,10 @@ value_t ntvl_map_window(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_mapf_window(const value_t*, uint8_t, vm_t*);
 /**
+ * filter_window(lst, f, window_len): filters the windows which returns a falsey result.
+ */
+value_t ntvl_filter_window(const value_t*, uint8_t, vm_t*);
+/**
  * sort(lst): returns a sorted list.
  */
 value_t ntvl_sort(const value_t*, uint8_t, vm_t*);
