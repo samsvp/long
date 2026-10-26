@@ -317,6 +317,7 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
             value_free(&ret, vm->ctx.alloc);
             return bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, &vm->ctx);                                          \
         }
+        value_free(&ret, vm->ctx.alloc);
         vs.arr[vs.size++] = x;
     }
 
@@ -353,8 +354,11 @@ value_t ntvl_all(const value_t* args, uint8_t n, vm_t* vm)
         value_t x = maybe_x.value;
         value_t ret = vm_call_value(vm, args[1], &x, 1);
         UNWRAP_ERR(ret);
-        if (IS_FALSEY(ret))
+        if (IS_FALSEY(ret)) {
+            value_free(&ret, vm->ctx.alloc);
             return value_false;
+        }
+        value_free(&ret, vm->ctx.alloc);
     }
 
     return value_true;
