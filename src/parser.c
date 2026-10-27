@@ -224,7 +224,7 @@ static precedence infix_prec(operator_kind op)
         case OPERATOR_EQUAL:
             return (precedence){ .left = 2, .right = 1, .has_right = true };
         case OPERATOR_PIPE_FORWARD:
-            return (precedence){ .left = 6, .right = 7, .has_right = true };
+            return (precedence){ .left = 8, .right = 9, .has_right = true };
         case OPERATOR_GREATER:
         case OPERATOR_GREATER_EQUAL:
         case OPERATOR_LESS:

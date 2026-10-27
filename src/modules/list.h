@@ -68,8 +68,28 @@ value_t ntvl_sort(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_sort_by(const value_t*, uint8_t, vm_t*);
 /**
- * all_by(lst, f): returns true if the all elements of the list satisfies f.
+ * all(lst, f): returns true if the all elements of the list satisfies f.
  */
 value_t ntvl_all(const value_t*, uint8_t, vm_t*);
+/**
+ * any(lst, f): returns true if the any element of the list satisfies f.
+ */
+value_t ntvl_any(const value_t*, uint8_t, vm_t*);
+/**
+ * max(lst): returns the maximum element of lst.
+ */
+value_t ntvl_max(const value_t*, uint8_t, vm_t*);
+/**
+ * max_by(lst, f): returns the element of lst where f(elem) is the maximum.
+ */
+value_t ntvl_max_by(const value_t*, uint8_t, vm_t*);
+/**
+ * min(lst): returns the minimum element of lst.
+ */
+value_t ntvl_min(const value_t*, uint8_t, vm_t*);
+/**
+ * min_by(lst, f): returns the element of lst where f(elem) is the minimum.
+ */
+value_t ntvl_min_by(const value_t*, uint8_t, vm_t*);
 
 #endif

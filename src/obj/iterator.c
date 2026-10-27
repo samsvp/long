@@ -7,6 +7,9 @@
 
 iterable_t iter_init(value_t from, const sv_allocator_t* a)
 {
+    if (from.kind != VALUE_OBJ)
+        return (iterable_t){0};
+
     switch (from.obj.cell->value.kind) {
         case OBJ_LIST: {
             ll_iter_t* it = sv_malloc(a, sizeof(ll_iter_t));

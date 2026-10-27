@@ -1,30 +1,27 @@
 import list("list")
 
-fun is_flush(hand) if len(hand) == 5 do
-    head = hand[0]
-    if list::all(hand[1..], fun [head](c) c.suit == head.suit) do
-        hand
-    end
+fun is_flush(hand)
+| (hand) when len(hand) < 5 do nil
+| ([head, ..tail]) do
+    list::all(tail, fun [head](c) c.suit == head.suit) and { kind: :flush, hand }
 end
 
-fun is_straight(hand)
-| ([x1, x2, x3, x4, x5]) do
-    if x4.rank == x5.rank - 1 and
-       x3.rank == x4.rank - 1 and
-       x2.rank == x3.rank - 1 and
-       (
-            (x1.rank == x2.rank - 1) or (x1.rank == 14 and x2.rank == 2)
-       )
-    do
-        hand
+fun is_straight(hand) do
+    match hand |> list::map(fun (c) c.rank)
+    | [2, 3, 4, 5, 14] do { kind: :straight, hand }
+    | values when len(values) == 5 do
+        if values
+            |> list::map_window(fun ([x1, x2]) x2 - x1, 2)
+            |> list::all(fun (x) x == 1)
+        do
+            { kind: :straight, hand }
+        end
+    | _ do nil
     end
-| (_) do nil
 end
 
 fun is_straight_flush(hand)
-    if hand |> is_flush() do
-        hand |> is_straight()
-    end
+    hand |> is_flush() and hand |> is_straight() and { kind: :straight_flush, hand }
 
 fun is_n(hand, n) if len(hand) >= n do
     matches =
@@ -34,7 +31,14 @@ fun is_n(hand, n) if len(hand) >= n do
             , n
         )
     if len(matches) > 0 do
-        matches[-1]
+        kind = match n
+        | 2 do :two
+        | 3 do :three
+        | 4 do :four
+        | 5 do :five
+        end
+
+        { kind, hand: matches[-1] }
     end
 end
 
@@ -52,29 +56,51 @@ fun is_five(hand)
 
 fun is_two_pair(hand)
 | ([x1, x2, x3, x4, x5]) do
-    if (is_two([x1, x2]) and is_two([x3, x4])) or
-       (is_two([x1, x2]) and is_two([x4, x5])) or
-       (is_two([x2, x3]) and is_two([x4, x5]))
-    do
-        hand
-    end
-| ([x1, x2, x3, x4]) do
-    if (is_two([x1, x2]) and is_two([x3, x4])) do
-        hand
-    end
+    ( (is_two([x1, x2]) and is_two([x3, x4])) or
+      (is_two([x1, x2]) and is_two([x4, x5])) or
+      (is_two([x2, x3]) and is_two([x4, x5])) ) and
+    { kind: :two_pair, hand }
+| ([x1, x2, x3, x4] = hand) do
+    is_two([x1, x2]) and is_two([x3, x4]) and { kind: :two_pair, hand }
 | (_) do nil
 end
 
-fun is_full_house(hand) if len(hand) == 5 do
-    [x1, x2, x3, x4, x5] =
+fun is_full_house(hand)
+| ([x1, x2, x3, x4, x5]) do
+    ( (is_two([x1, x2]) and is_three([x3, x4, x5])) or
+      (is_three([x1, x2, x3]) and is_two([x4, x5])) ) and
+    { kind: :full_house, hand }
+| (_) do nil
+end
+
+fun score_hand(hand) do
+    hands =
         hand
         |> list::sort_by(fun (c) c.rank)
+        |> list::combinations(5)
 
-    if (is_two([x1, x2]) and is_three([x3, x4, x5])) or
-       (is_three([x1, x2, x3]) and is_two([x4, x5]))
-    do
-        hand
+    fun score(hand, fns) match fns
+    | [fn, ..tail] do
+        if hand_rank = fn(hand) do
+            hand_rank
+        else
+            score(hand, tail)
+        end
+    | [] do
+        { kind: :one, hand } # todo max_by on hand
     end
+
+    scores = map h in hands do
+        score(h, [ is_straight_flush
+                 , is_four
+                 , is_full_house
+                 , is_flush
+                 , is_straight
+                 , is_three
+                 , is_two_pair
+                 , is_two ])
+    end
+    scores
 end
 
 
@@ -90,43 +116,9 @@ hand =
     , { suit: :heart, rank: 6 }
     , { suit: :heart, rank: 10 }
     , { suit: :clubs, rank: 10 } ]
-    |> list::sort_by(fun (c) c.rank)
 
 
-hand
-|> list::combinations(5)
-|> list::map(is_flush)
-|> list::filter(fun (x) x)
-|> println()
-
-println("")
-
-for h in hand
-    |> list::combinations(5)
-    |> list::map(is_straight)
-    |> list::filter(fun (x) x)
-do
-    h |> println()
+for s in score_hand(hand) do
+    println(s)
 end
 
-println("")
-
-for h in hand
-    |> list::combinations(5)
-    |> list::map(is_straight_flush)
-    |> list::filter(fun (x) x)
-do
-    h |> println()
-end
-
-println("")
-
-for h in hand
-    |> list::combinations(5)
-    |> list::map(is_three)
-    |> list::filter(fun (x) x)
-do
-    h |> println()
-end
-
-println("")

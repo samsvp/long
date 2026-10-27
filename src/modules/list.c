@@ -495,7 +495,7 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
 
     sort_ctx_t ctx = {
         .vm = vm,
-        .f = *f,
+        .f = f != NULL ? *f : value_nil,
         .err = sv_opt_none,
     };
     stable_sort(vs.arr, vs.size, sizeof(value_t), &ctx, f == NULL ? value_num_cmp : keyed_cmp);
@@ -514,7 +514,7 @@ value_t ntvl_sort_by(const value_t* args, uint8_t n, vm_t* vm)
     return sort(args[0], &args[1], vm);
 }
 
-value_t ntvl_all(const value_t* args, uint8_t n, vm_t* vm)
+static value_t any_all(const value_t* args, uint8_t n, bool is_all, vm_t* vm)
 {
     assert(n == 2);
 
@@ -530,12 +530,24 @@ value_t ntvl_all(const value_t* args, uint8_t n, vm_t* vm)
         value_t x = maybe_x.value;
         value_t ret = vm_call_value(vm, args[1], &x, 1);
         UNWRAP_ERR(ret);
-        if (IS_FALSEY(ret)) {
+        if (is_all) {
+            if (IS_FALSEY(ret)) {
+                value_free(&ret, vm->ctx.alloc);
+                return value_false;
+            }
+        } else if (!IS_FALSEY(ret)) {
             value_free(&ret, vm->ctx.alloc);
-            return value_false;
+            return value_true;
         }
         value_free(&ret, vm->ctx.alloc);
     }
 
-    return value_true;
+    return is_all ? value_true : value_false;
 }
+
+value_t ntvl_all(const value_t* args, uint8_t n, vm_t* vm)
+{ return any_all(args, n, true, vm); }
+
+value_t ntvl_any(const value_t* args, uint8_t n, vm_t* vm)
+{ return any_all(args, n, false, vm); }
+
