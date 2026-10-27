@@ -1,5 +1,17 @@
 import list("list")
 
+fun hand_kind_to_int(kind)
+| (:straight_flush) do 10
+| (:four) do 9
+| (:full_house) do 8
+| (:flush) do 7
+| (:straight) do 6
+| (:three) do 5
+| (:two_pair) do 4
+| (:two) do 3
+| (:one) do 2
+end
+
 fun is_flush(hand)
 | (hand) when len(hand) < 5 do nil
 | ([head, ..tail]) do
@@ -87,10 +99,12 @@ fun score_hand(hand) do
             score(hand, tail)
         end
     | [] do
-        { kind: :one, hand } # todo max_by on hand
+        { kind: :one
+        , hand: hand |> list::max_by(fun (x) x.rank)
+        }
     end
 
-    scores = map h in hands do
+    map h in hands do
         score(h, [ is_straight_flush
                  , is_four
                  , is_full_house
@@ -100,7 +114,7 @@ fun score_hand(hand) do
                  , is_two_pair
                  , is_two ])
     end
-    scores
+    |> list::max_by(fun (h) hand_kind_to_int(h.kind))
 end
 
 
@@ -118,7 +132,5 @@ hand =
     , { suit: :clubs, rank: 10 } ]
 
 
-for s in score_hand(hand) do
-    println(s)
-end
-
+score_hand(hand)
+|> println()

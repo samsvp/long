@@ -551,3 +551,45 @@ value_t ntvl_all(const value_t* args, uint8_t n, vm_t* vm)
 value_t ntvl_any(const value_t* args, uint8_t n, vm_t* vm)
 { return any_all(args, n, false, vm); }
 
+static value_t min_max(const value_t* args, uint8_t n, bool is_max, vm_t* vm)
+{
+    assert(n == 1 || n == 2);
+
+    CHECK_LIST(args[0]);
+    const value_t* f = n == 2 ? &args[1] : NULL;
+
+    ll_iter_t iter = ll_iter_init_no_borrow(AS_LIST(args[0]));
+    sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
+    value_t best = value_nil;
+    double best_key = -INFINITY;
+    while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
+        value_t x = maybe_x.value;
+        value_t key = f == NULL ? x : vm_call_value(vm, *f, &x, 1);
+        UNWRAP_ERR(key);
+        if (!IS_NUMBER(key)) {
+            value_t err = bad_arg_type_error(key, VALUE_NUMBER, OBJ_LIST, &vm->ctx);
+            if (f != NULL)
+                value_free(&key, vm->ctx.alloc);
+            return err;
+        }
+        if (is_max ? key.number > best_key : key.number < best_key) {
+            best = x;
+            best_key = key.number;
+        }
+    }
+
+    return value_borrow(best);
+}
+
+value_t ntvl_min(const value_t* args, uint8_t n, vm_t* vm)
+{ return min_max(args, n, false, vm); }
+
+value_t ntvl_max(const value_t* args, uint8_t n, vm_t* vm)
+{ return min_max(args, n, true, vm); }
+
+value_t ntvl_min_by(const value_t* args, uint8_t n, vm_t* vm)
+{ return min_max(args, n, false, vm); }
+
+value_t ntvl_max_by(const value_t* args, uint8_t n, vm_t* vm)
+{ return min_max(args, n, true, vm); }
+
