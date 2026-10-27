@@ -1721,6 +1721,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 2, .name = "all", .fn = ntvl_all },
         { .arity = 2, .name = "take", .fn = ntvl_take },
         { .arity = 2, .name = "skip", .fn = ntvl_skip },
+        { .arity = 2, .name = "combinations", .fn = ntvl_combinations },
     };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },

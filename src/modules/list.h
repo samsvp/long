@@ -44,6 +44,10 @@ value_t ntvl_take(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_skip(const value_t*, uint8_t, vm_t*);
 /**
+ * combinations(lst, k): returns every combination of k elements of lst, keeping their order.
+ */
+value_t ntvl_combinations(const value_t*, uint8_t, vm_t*);
+/**
  * map_window(lst, f, window_len): applies f to successive windows of lst.
  */
 value_t ntvl_map_window(const value_t*, uint8_t, vm_t*);

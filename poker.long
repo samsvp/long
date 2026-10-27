@@ -1,46 +1,132 @@
 import list("list")
 
-fun is_flush(hand)
-    hand
-    |> list::sort_by(fun (c) c.suit |> int())
-    |> list::filter_window(
-        fun ([x, ..tail] = cards)
-            list::all(tail, fun [x](c) c.suit == x.suit)
-        , 5)
+fun is_flush(hand) if len(hand) == 5 do
+    head = hand[0]
+    if list::all(hand[1..], fun [head](c) c.suit == head.suit) do
+        hand
+    end
+end
 
-fun is_straight(hand) do
-    hand
-    |> list::sort_by(fun (c) c.rank)
-    |> list::filter_window(
-        fun ([x1, x2, x3, x4, x5])
-            x1.rank == x2.rank - 1 and
-            x2.rank == x3.rank - 1 and
-            x3.rank == x4.rank - 1 and
-            x4.rank == x5.rank - 1
-        , 5)
+fun is_straight(hand)
+| ([x1, x2, x3, x4, x5]) do
+    if x4.rank == x5.rank - 1 and
+       x3.rank == x4.rank - 1 and
+       x2.rank == x3.rank - 1 and
+       (
+            (x1.rank == x2.rank - 1) or (x1.rank == 14 and x2.rank == 2)
+       )
+    do
+        hand
+    end
+| (_) do nil
 end
 
 fun is_straight_flush(hand)
-    hand |> is_flush() |> list::map(is_straight)
+    if hand |> is_flush() do
+        hand |> is_straight()
+    end
 
-hand = [
-      { suit: :spades, rank: 10 }
+fun is_n(hand, n) if len(hand) >= n do
+    matches =
+        hand
+        |> list::filter_window(
+            fun ([x, ..xs]) list::all(xs, fun [x](y) x.rank == y.rank)
+            , n
+        )
+    if len(matches) > 0 do
+        matches[-1]
+    end
+end
+
+fun is_two(hand)
+    is_n(hand, 2)
+
+fun is_three(hand)
+    is_n(hand, 3)
+
+fun is_four(hand)
+    is_n(hand, 4)
+
+fun is_five(hand)
+    is_n(hand, 5)
+
+fun is_two_pair(hand)
+| ([x1, x2, x3, x4, x5]) do
+    if (is_two([x1, x2]) and is_two([x3, x4])) or
+       (is_two([x1, x2]) and is_two([x4, x5])) or
+       (is_two([x2, x3]) and is_two([x4, x5]))
+    do
+        hand
+    end
+| ([x1, x2, x3, x4]) do
+    if (is_two([x1, x2]) and is_two([x3, x4])) do
+        hand
+    end
+| (_) do nil
+end
+
+fun is_full_house(hand) if len(hand) == 5 do
+    [x1, x2, x3, x4, x5] =
+        hand
+        |> list::sort_by(fun (c) c.rank)
+
+    if (is_two([x1, x2]) and is_three([x3, x4, x5])) or
+       (is_three([x1, x2, x3]) and is_two([x4, x5]))
+    do
+        hand
+    end
+end
+
+
+hand =
+    [ { suit: :spades, rank: 10 }
     , { suit: :spades, rank: 5 }
     , { suit: :spades, rank: 8 }
     , { suit: :spades, rank: 4 }
-    , { suit: :spades, rank: 1 }
+    , { suit: :spades, rank: 14 }
     , { suit: :heart, rank: 9 }
     , { suit: :heart, rank: 8 }
     , { suit: :heart, rank: 7 }
     , { suit: :heart, rank: 6 }
     , { suit: :heart, rank: 10 }
-]
+    , { suit: :clubs, rank: 10 } ]
+    |> list::sort_by(fun (c) c.rank)
 
-is_flush(hand)
+
+hand
+|> list::combinations(5)
+|> list::map(is_flush)
+|> list::filter(fun (x) x)
 |> println()
 
-is_straight(hand)
-|> println()
+println("")
 
-is_straight_flush(hand)
-|> println()
+for h in hand
+    |> list::combinations(5)
+    |> list::map(is_straight)
+    |> list::filter(fun (x) x)
+do
+    h |> println()
+end
+
+println("")
+
+for h in hand
+    |> list::combinations(5)
+    |> list::map(is_straight_flush)
+    |> list::filter(fun (x) x)
+do
+    h |> println()
+end
+
+println("")
+
+for h in hand
+    |> list::combinations(5)
+    |> list::map(is_three)
+    |> list::filter(fun (x) x)
+do
+    h |> println()
+end
+
+println("")
