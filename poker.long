@@ -1,15 +1,20 @@
 import list("list")
 
-fun hand_kind_to_int(kind)
-| (:straight_flush) do 10
-| (:four) do 9
-| (:full_house) do 8
-| (:flush) do 7
-| (:straight) do 6
-| (:three) do 5
-| (:two_pair) do 4
-| (:two) do 3
-| (:one) do 2
+fun hand_score({ kind, hand }) do
+    fun score(hand) list::reduce(hand, fun (card, acc) acc + (1 << card.rank), 0)
+
+    match kind
+    | :five do (1 << 49) + hand[0].rank
+    | :straight_flush do (1 << 48) + score(hand)
+    | :four do (1 << 47) + hand[0].rank
+    | :full_house do (1 << 46) + (1 << hand[0].rank + 14) + hand[-1].rank
+    | :flush do (1 << 45) + score(hand)
+    | :straight do (1 << 44) + score(hand)
+    | :three do (1 << 43) + hand[0].rank
+    | :two_pair do (1 << 42) + (1 << hand[0].rank + 14) + hand[-1].rank
+    | :two do (1 << 41) + hand[0].rank
+    | :one do (1 << 40) + score(hand)
+    end
 end
 
 fun is_flush(hand)
@@ -20,7 +25,7 @@ end
 
 fun is_straight(hand) do
     match hand |> list::map(fun (c) c.rank)
-    | [2, 3, 4, 5, 14] do { kind: :straight, hand }
+    | [2, 3, 4, 5, 14] do { kind: :straight, hand: [{ rank: 1, ..hand[-1] }, ..hand[0..-1]] }
     | values when len(values) == 5 do
         if values
             |> list::map_window(fun ([x1, x2]) x2 - x1, 2)
@@ -33,7 +38,7 @@ fun is_straight(hand) do
 end
 
 fun is_straight_flush(hand)
-    hand |> is_flush() and hand |> is_straight() and { kind: :straight_flush, hand }
+    hand |> is_flush() and (hand_kind = hand |> is_straight()) and { kind: :straight_flush, ..hand_kind }
 
 fun is_n(hand, n) if len(hand) >= n do
     matches =
@@ -66,26 +71,24 @@ fun is_four(hand)
 fun is_five(hand)
     is_n(hand, 5)
 
-fun is_two_pair(hand)
-| ([x1, x2, x3, x4, x5]) do
-    ( (is_two([x1, x2]) and is_two([x3, x4])) or
-      (is_two([x1, x2]) and is_two([x4, x5])) or
-      (is_two([x2, x3]) and is_two([x4, x5])) ) and
-    { kind: :two_pair, hand }
-| ([x1, x2, x3, x4] = hand) do
-    is_two([x1, x2]) and is_two([x3, x4]) and { kind: :two_pair, hand }
-| (_) do nil
+fun is_two_pair(hand) do
+    two_pair_hand = match hand |> list::map(fun (c) c.rank)
+    | [l, l, h, h, _] do [hand[2], hand[3], hand[0], hand[1]]
+    | [l, l, _, h, h] do [hand[3], hand[4], hand[0], hand[1]]
+    | [_, l, l, h, h] do [hand[3], hand[4], hand[1], hand[2]]
+    | [l, l, h, h] do [hand[2], hand[3], hand[0], hand[1]]
+    | _ do nil
+    end
+    two_pair_hand and { kind: :two_pair, hand: two_pair_hand }
 end
 
-fun is_full_house(hand)
-| ([x1, x2, x3, x4, x5]) do
-    ( (is_two([x1, x2]) and is_three([x3, x4, x5])) or
-      (is_three([x1, x2, x3]) and is_two([x4, x5])) ) and
-    { kind: :full_house, hand }
-| (_) do nil
+fun is_full_house(hand) match hand |> list::map(fun (c) c.rank)
+| [l, l, h, h, h] do { kind: :full_house, hand: [hand[2], hand[3], hand[4], hand[0], hand[1]] }
+| [h, h, h, l, l] do { kind: :full_house, hand }
+| _ do nil
 end
 
-fun score_hand(hand) do
+fun best_hand(hand) do
     hands =
         hand
         |> list::sort_by(fun (c) c.rank)
@@ -99,9 +102,7 @@ fun score_hand(hand) do
             score(hand, tail)
         end
     | [] do
-        { kind: :one
-        , hand: hand |> list::max_by(fun (x) x.rank)
-        }
+        { kind: :one, hand }
     end
 
     map h in hands do
@@ -114,7 +115,7 @@ fun score_hand(hand) do
                  , is_two_pair
                  , is_two ])
     end
-    |> list::max_by(fun (h) hand_kind_to_int(h.kind))
+    |> list::max_by(fun (h) hand_score(h))
 end
 
 
@@ -132,5 +133,5 @@ hand =
     , { suit: :clubs, rank: 10 } ]
 
 
-score_hand(hand)
+best_hand(hand)
 |> println()

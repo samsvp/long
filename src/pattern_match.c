@@ -1,6 +1,7 @@
 #include "pattern_match.h"
 #include "pattern_shape.h"
 #include "obj/map.h"
+#include "sexpr.h"
 #include "stable_sort.h"
 #include "compiler.h"
 #include "std/option.h"
@@ -13,7 +14,7 @@ typedef sv_vec_t(sexpr_t) cons_t;
 #define CONDS_START 2
 #define TEMP_DIGITS 12
 #define TEMP_SIZE (TEMP_DIGITS + 2)
-#define TEMPS_MAX 1024
+#define TEMPS_MAX 4096
 #define FAIL_NAME "$fail"
 
 static char temp_names[TEMPS_MAX][TEMP_SIZE];
@@ -109,6 +110,11 @@ typedef enum {
     PAT_TUPLE,
     PAT_VAR,
 } pattern_class;
+
+static bool pattern_is_collection(pattern_class pat_class)
+{
+    return pat_class == PAT_LIST || pat_class == PAT_TUPLE || pat_class == PAT_HASHMAP || pat_class == PAT_RECORD;
+}
 
 static pattern_class pattern_class_of(sexpr_t pattern)
 {
@@ -252,6 +258,11 @@ static bool is_dot_dot(sexpr_t s)
     return s.tag == S_ATOM && s.atom.kind == TOKEN_DOT_DOT;
 }
 
+static bool is_tail(sexpr_t s)
+{
+    return s.tag == S_CONS && is_dot_dot(s.cons.arr[0]);
+}
+
 static bool is_fail(sexpr_t e)
 {
     return e.tag == S_ATOM
@@ -370,6 +381,16 @@ static sexpr_t sexpr_literal(const char* name)
         .line = 0,
         .literal = { .kind = LITERAL_IDENTIFIER, .literal = sv_str_init(name) }
     });
+}
+
+static sexpr_t compare_vals(cons_t* cons, sexpr_t lhs, sexpr_t rhs)
+{
+    token_t eql_token = { .kind = TOKEN_OPERATOR, .line = 0, .operator = OPERATOR_EQUAL_EQUAL };
+    APPEND_CAP(cons, atom_sexpr(eql_token));
+    APPEND_CAP(cons, lhs);
+    APPEND_CAP(cons, rhs);
+
+    return cons_sexpr(*cons);
 }
 
 static sexpr_t bind_var(cons_t* cons, sexpr_t lhs, sexpr_t rhs)
@@ -707,7 +728,7 @@ static sexpr_t compile_list(cons_t match, int* start_i, sexpr_t u, ctx_t* ctx, c
         APPEND_CAP(&tail, ATOM_TOKEN(TOKEN_SP_FUNCTION, .fn = FN_LIST));
         for (int64_t i = 2; i < list_cond.cons.size; i++)
             APPEND_CAP(&tail, list_cond.cons.arr[i]);
-        if (tail.size == 2 && tail.arr[1].tag == S_CONS && is_dot_dot(tail.arr[1].cons.arr[0])) {
+        if (tail.size == 2 && is_tail(tail.arr[1])) {
             // extract xs from (.. xs)
             APPEND_CAP(&new_pat, tail.arr[1].cons.arr[1]);
         } else {
@@ -790,7 +811,7 @@ static sexpr_t patch_when(sexpr_t body, sexpr_t cond, const sv_allocator_t* a)
     APPEND_CAP(&and_block, when_cond);
 
     APPEND_CAP(&guard, cons_sexpr(and_block));
-    APPEND_CAP(&guard, body);
+    APPEND_CAP(&guard, body.cons.arr[2]);
     APPEND_CAP(&guard, id_atom(FAIL_NAME));
     return cons_sexpr(guard);
 }
@@ -987,7 +1008,7 @@ static sexpr_t compile_record(cons_t match, int* start_i, sexpr_t u, ctx_t* ctx,
  *      (= $3 (hashmap-size u))
  *      (match (tuple $1 $2 $3)
  *          (tuple (tuple 1 0 2) body); pre compute hashmap size
- *          (tuple (tuple 0 1 _) body); sort x and y fields. hashmap may have any size
+ *          (tuple (tupl-----e 0 1 _) body); sort x and y fields. hashmap may have any size
  *      )
  * )
  */
@@ -1130,6 +1151,95 @@ end:
     return close_pipe(bar_expr);
 }
 
+static sexpr_t unwrap_repeats_list_tuple_rec(cons_t, sexpr_t*, transient_hashmap_t*, ctx_t*, const sv_allocator_t*);
+static sexpr_t unwrap_repeats_record_rec(cons_t, sexpr_t*, transient_hashmap_t*, ctx_t*, const sv_allocator_t*);
+
+static void linearize(sexpr_t pat, sexpr_t* body, cons_t* list,
+                      transient_hashmap_t* seen_map, ctx_t* ctx, const sv_allocator_t* a)
+{
+    pattern_class pat_class = pattern_class_of(pat);
+    if (pat_class == PAT_TUPLE || pat_class == PAT_LIST || is_tail(pat)) {
+        APPEND_CAP(list, unwrap_repeats_list_tuple_rec(pat.cons, body, seen_map, ctx, a));
+        return;
+    } else if (pat_class == PAT_RECORD || pat_class == PAT_HASHMAP) {
+        APPEND_CAP(list, unwrap_repeats_record_rec(pat.cons, body, seen_map, ctx, a));
+        return;
+    }
+
+    if (!pattern_is_name(pat) || is_wildcard(pat)) {
+        APPEND_CAP(list, pat);
+        return;
+    }
+
+    value_t key = literal_to_value(AS_LITERAL(pat), pat.atom.line, ctx, a);
+    if (!thm_get_or_put(seen_map, (kv_t){ .key = key, .value = value_nil }, NULL, a).is_some) {
+        APPEND_CAP(list, pat);
+        return;
+    }
+
+    sexpr_t new_name = next_u();
+    APPEND_CAP(list, new_name);
+    cons_t eqls = cons_init(3, a);
+    *body = patch_when(*body, compare_vals(&eqls, pat, new_name), a);
+}
+
+/**
+ * Transforms a pattern
+ * (hashmap/record x x y x (..xs)), body into
+ * (hashmap/record x x y $2 (..xs)), (when (== x $1) body)
+ */
+static sexpr_t unwrap_repeats_record_rec(cons_t src, sexpr_t* body, transient_hashmap_t* seen_map,
+                                         ctx_t* ctx, const sv_allocator_t* a)
+{
+    cons_t list = cons_init(src.size, a);
+    APPEND_CAP(&list, src.arr[0]);
+
+    for (int64_t i = 1; i < src.size; i++) {
+        sexpr_t pat = src.arr[i];
+
+        // key, just copy it
+        if (i % 2 == 1) {
+            APPEND_CAP(&list, pat);
+            continue;
+        }
+
+        linearize(pat, body, &list, seen_map, ctx, a);
+    }
+
+    return cons_sexpr(list);
+}
+
+/**
+ * Transforms a pattern
+ * (list/tuple x x y y (..xs)), body into
+ * (list/tuple x $1 y $2 (..xs)), (when (and (== x $1) (== x $2)) body)
+ */
+static sexpr_t unwrap_repeats_list_tuple_rec(cons_t src, sexpr_t* body, transient_hashmap_t* seen_map,
+                                             ctx_t* ctx, const sv_allocator_t* a)
+{
+    cons_t list = cons_init(src.size, a);
+    APPEND_CAP(&list, src.arr[0]);
+
+    for (int64_t i = 1; i < src.size; i++) {
+        sexpr_t pat = src.arr[i];
+        linearize(pat, body, &list, seen_map, ctx, a);
+    }
+
+    return cons_sexpr(list);
+}
+
+static sexpr_t unwrap_repeats_list_tuple(cons_t row, pattern_class pat_class, ctx_t* ctx, const sv_allocator_t* a)
+{
+    cons_t src = row.arr[1].cons;
+    transient_hashmap_t seen_map = thm_init(src.size - 1, a);
+    sexpr_t* body = &row.arr[2];
+    if (pat_class == PAT_LIST || pat_class == PAT_TUPLE)
+        row.arr[1] = unwrap_repeats_list_tuple_rec(src, body, &seen_map, ctx, a);
+    else if (pat_class == PAT_HASHMAP || pat_class == PAT_RECORD)
+        row.arr[1] = unwrap_repeats_record_rec(src, body, &seen_map, ctx, a);
+    return cons_sexpr(row);
+}
+
 sexpr_t match_compile(sexpr_t s, ctx_t* ctx, const sv_allocator_t* a)
 {
     temps_used = 0;
@@ -1147,7 +1257,14 @@ sexpr_t match_compile(sexpr_t s, ctx_t* ctx, const sv_allocator_t* a)
         cons_t row = cons_init(src.size, a);
         for (int64_t j = 0; j < src.size; j++)
             APPEND_CAP(&row, src.arr[j]);
-        APPEND_CAP(&match, cons_sexpr(row));
+
+        pattern_class pat_class = pattern_class_of(row.arr[1]);
+        sexpr_t s_row =
+            pattern_is_collection(pat_class) ?
+                unwrap_repeats_list_tuple(row, pat_class, ctx, a)
+                : cons_sexpr(row);
+
+        APPEND_CAP(&match, s_row);
     }
 
     sexpr_t subject = match.arr[1];

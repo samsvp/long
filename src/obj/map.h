@@ -154,6 +154,11 @@ int64_t thm_count(transient_hashmap_t);
  */
 bool thm_put(transient_hashmap_t*, kv_t, const sv_allocator_t*);
 /**
+ * Gets the key value if present or insert the kv pair if the key is not present. Success is false on
+ * allocation failure and returns none if the kv pair was inserted.
+ */
+sv_opt_t(value_t) thm_get_or_put(transient_hashmap_t*, kv_t, bool* success, const sv_allocator_t*);
+/**
  * Removes the key in place, freeing the removed value; the key slot remains
  * as a tombstone until the next growth. Returns whether the key was present.
  */

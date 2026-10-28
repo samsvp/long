@@ -673,6 +673,15 @@ void thm_deinit(transient_hashmap_t* t, const sv_allocator_t* a)
     node_free(t, a);
 }
 
+int64_t thm_count(transient_hashmap_t t)
+{
+    map_iter_t it = iter_init_node(t);
+    int64_t count = 0;
+    for (sv_opt_t(sparse_item_t) item = iter_next_item(&it); item.is_some; item = iter_next_item(&it))
+        count++;
+    return count;
+}
+
 sv_opt_t(value_t) thm_get(transient_hashmap_t t, value_t key)
 {
     get_result_t r = node_get_hashed(t, key, value_hash(key), 0);
@@ -681,13 +690,36 @@ sv_opt_t(value_t) thm_get(transient_hashmap_t t, value_t key)
     return sv_opt_some_t(value_t, r.item->value.value);
 }
 
-int64_t thm_count(transient_hashmap_t t)
+static bool thm_grow(transient_hashmap_t* t, kv_t kv, const sv_allocator_t* a)
 {
-    map_iter_t it = iter_init_node(t);
-    int64_t count = 0;
-    for (sv_opt_t(sparse_item_t) item = iter_next_item(&it); item.is_some; item = iter_next_item(&it))
-        count++;
-    return count;
+    map_node_t bigger = map_flatten(*t, kv.key, sv_opt_some_t(value_t, kv.value), a);
+    if (bigger.set.store.cell == NULL)
+        return false;
+    node_free(t, a);
+    *t = bigger;
+    return true;
+}
+
+sv_opt_t(value_t) thm_get_or_put(transient_hashmap_t* t, kv_t kv, bool* success, const sv_allocator_t* a)
+{
+    get_result_t r = node_get_hashed(*t, kv.key, value_hash(kv.key), 0);
+    if (r.kind == GET_ITEM)
+        return sv_opt_some_t(value_t, r.item->value.value);
+
+    bool successful;
+    if (r.kind == GET_EMPTY &&
+        t->set.len * 100 / set_capacity(t->set) < MAX_LOAD_PERCENTAGE
+    ) {
+        successful = node_insert_mut(t, kv.key, sv_opt_some_t(value_t, kv.value), a);
+        goto ret;
+    }
+
+    successful = thm_grow(t, kv, a);
+
+ret:
+    if (success != NULL)
+        *success = successful;
+    return sv_opt_none_t(value_t);
 }
 
 bool thm_put(transient_hashmap_t* t, kv_t kv, const sv_allocator_t* a)
@@ -709,12 +741,7 @@ bool thm_put(transient_hashmap_t* t, kv_t kv, const sv_allocator_t* a)
             break;
     }
 
-    map_node_t bigger = map_flatten(*t, kv.key, sv_opt_some_t(value_t, kv.value), a);
-    if (bigger.set.store.cell == NULL)
-        return false;
-    node_free(t, a);
-    *t = bigger;
-    return true;
+    return thm_grow(t, kv, a);
 }
 
 bool thm_delete(transient_hashmap_t* t, value_t key, const sv_allocator_t* a)
