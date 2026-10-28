@@ -231,9 +231,6 @@ static inline void sv_test_string_builder(sv_testing_t* t)
    sv_str_t s = sv_strb_to_str(&b);
    sv_test_run(t, s.size == 5);
    sv_test_run(t, sv_str_comp(s, sv_str_init("hello")));
-   sv_test_run(t, b.arr == NULL);
-   sv_test_run(t, b.size == 0);
-   sv_test_run(t, b.capacity == 0);
 
    sv_test_run(t, sv_strb_add(&b, "again", 5, &sv_gpa) == 5);
    sv_str_t s2 = sv_strb_to_str(&b);

@@ -844,6 +844,10 @@ static void compile_operator(compiler_t* c, operator_kind op, const sexpr_t* arg
         case OPERATOR_SLASH: instruction = OP_DIV; break;
         case OPERATOR_STAR: instruction = OP_MUL; break;
         case OPERATOR_PERCENT: instruction = OP_MOD; break;
+        case OPERATOR_LESS_LESS: compile_binary_op(c, OP_SHIFT_LEFT, "shift", args, n, line, ctx); return;
+        case OPERATOR_GREATER_GREATER: compile_binary_op(c, OP_SHIFT_RIGHT, "shift", args, n, line, ctx); return;
+        case OPERATOR_AMP_AMP: compile_binary_op(c, OP_BIT_AND, "bitwise operation", args, n, line, ctx); return;
+        case OPERATOR_PIPE_PIPE: compile_binary_op(c, OP_BIT_OR, "bitwise operation", args, n, line, ctx); return;
         case OPERATOR_EQUAL: compile_equal(c, args, n, line, ctx); return;
         case OPERATOR_EQUAL_EQUAL: compile_binary_op(c, OP_EQUALS, "comparison", args, n, line, ctx); return;
         case OPERATOR_BANG_EQUAL: compile_binary_op(c, OP_NOT_EQUALS, "comparison", args, n, line, ctx); return;

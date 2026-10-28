@@ -305,21 +305,42 @@ static inline void sv_test_map_count_flat(sv_testing_t* t)
 
 static inline void sv_test_map_flatten(sv_testing_t* t)
 {
-   hashmap_t m = sv_test_map_big(40, &sv_gpa);
-   sv_test_run(t, m.cell->value.depth == 0);
+   hashmap_t snapshot = sv_test_map_big(40, &sv_gpa);
+   hashmap_t m = sv_rc_borrow(snapshot);
 
-   const int8_t expected[] = { 1, 2, 3, 4, 5, 0, 1, 2, 3 };
+   /* Layers stay at most MAX_DEPTH (5) deep, and the map flattens once it gets there. */
+   double latest[80];
    int ok = 1;
-   for (int64_t i = 0; i < 9; i++) {
-      hashmap_t next = map_put(m, sv_test_map_kv(0, (double)(1000 + i)), &sv_gpa);
+   bool reached_max = false;
+   bool flattened = false;
+   for (int64_t i = 0; i < 1000; i++) {
+      double k = (double)(i % 80);
+      hashmap_t next = map_put(m, sv_test_map_kv(k, (double)(1000 + i)), &sv_gpa);
       map_deinit(&m, &sv_gpa);
       m = next;
-      ok = ok && m.cell->value.depth == expected[i];
-      ok = ok && sv_test_map_get_num(m, 0) == (double)(1000 + i);
-      ok = ok && sv_test_map_get_num(m, 39) == 39;
+      latest[i % 80] = (double)(1000 + i);
+      int8_t depth = m.cell->value.depth;
+      ok = ok && depth <= 5;
+      reached_max = reached_max || depth == 5;
+      flattened = flattened || (reached_max && depth == 0);
+      ok = ok && sv_test_map_get_num(m, k) == latest[i % 80];
    }
    sv_test_run(t, ok);
+   sv_test_run(t, flattened);
+
+   bool all_latest = true;
+   for (int64_t k = 0; k < 80; k++)
+      all_latest = all_latest && sv_test_map_get_num(m, (double)k) == latest[k];
+   sv_test_run(t, all_latest);
+
+   bool snapshot_kept = map_count(snapshot) == 40;
+   for (int64_t k = 0; k < 40; k++)
+      snapshot_kept = snapshot_kept && sv_test_map_get_num(snapshot, (double)k) == (double)k;
+   snapshot_kept = snapshot_kept && !map_get(snapshot, sv_test_map_num(40)).is_some;
+   sv_test_run(t, snapshot_kept);
+
    map_deinit(&m, &sv_gpa);
+   map_deinit(&snapshot, &sv_gpa);
 }
 
 static inline void sv_test_map_iter(sv_testing_t* t)

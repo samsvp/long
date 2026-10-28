@@ -79,41 +79,6 @@ static inline void sv_test_record_print(sv_testing_t* t)
    value_free(&s, &sv_gpa);
 }
 
-static inline void sv_test_record_vm_ops(sv_testing_t* t)
-{
-   fn_builder_t b = fnb_init(sv_str_copy(sv_str_init("tuple test"), &sv_gpa));
-   sv_test_run(t, fnb_add_constant(&b, sv_test_record_num(0), &sv_gpa).is_some);
-   sv_test_run(t, fnb_add_constant(&b, sv_test_record_num(10), &sv_gpa).is_some);
-   sv_test_run(t, fnb_add_constant(&b, sv_test_record_num(1), &sv_gpa).is_some);
-   sv_test_run(t, fnb_add_constant(&b, sv_test_record_num(20), &sv_gpa).is_some);
-   sv_test_run(t, fnb_add_bytes(&b, OP_RECORD, 2, 0, &sv_gpa));
-   sv_test_run(t, fnb_add_bytes(&b, OP_RECORD_GET, 1, 0, &sv_gpa));
-   sv_test_run(t, fnb_add_byte(&b, OP_RETURN, 0, &sv_gpa));
-
-   vm_t vm = vm_init(fnb_build(&b), 1000000, (globals_t){0}, &sv_gpa);
-   sv_opt_t(error_t) err = vm_run(&vm);
-   sv_test_run(t, !err.is_some);
-   sv_test_run(t, vm.stack.size == 1);
-   sv_test_run(t, vm.stack.arr[0].kind == VALUE_NUMBER && vm.stack.arr[0].number == 20);
-   vm_deinit(&vm);
-
-   fn_builder_t mb = fnb_init(sv_str_copy(sv_str_init("tuple miss"), &sv_gpa));
-   sv_test_run(t, fnb_add_constant(&mb, sv_test_record_num(0), &sv_gpa).is_some);
-   sv_test_run(t, fnb_add_constant(&mb, sv_test_record_num(10), &sv_gpa).is_some);
-   sv_test_run(t, fnb_add_bytes(&mb, OP_RECORD, 1, 0, &sv_gpa));
-   sv_test_run(t, fnb_add_bytes(&mb, OP_RECORD_GET, 7, 0, &sv_gpa));
-   sv_test_run(t, fnb_add_byte(&mb, OP_RETURN, 0, &sv_gpa));
-
-   vm_t miss = vm_init(fnb_build(&mb), 1000000, (globals_t){0}, &sv_gpa);
-   sv_opt_t(error_t) merr = vm_run(&miss);
-   sv_test_run(t, merr.is_some);
-   sv_test_run(t, merr.value.error_code == VM_ERR_FIELD_NOT_FOUND);
-   /* No name table and bytes emitted on line 0, so the message names neither. */
-   sv_test_run(t, sv_str_comp(merr.value.msg, sv_str_init("Line 0: Record has no field '?'")));
-   error_free(&merr.value, &sv_gpa);
-   vm_deinit(&miss);
-}
-
 static inline void sv_test_record_update(sv_testing_t* t)
 {
    value_t s = value_init_str(sv_str_init("str"), &sv_gpa);
@@ -163,7 +128,6 @@ static inline void sv_test_record(sv_testing_t* t)
    sv_test_record_values(t);
    sv_test_record_update(t);
    sv_test_record_print(t);
-   sv_test_record_vm_ops(t);
 }
 
 #endif

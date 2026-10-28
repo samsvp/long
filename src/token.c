@@ -18,6 +18,10 @@ static const char* operator_text(operator_kind op)
         case OPERATOR_STAR: return "*";
         case OPERATOR_SLASH: return "/";
         case OPERATOR_PERCENT: return "%";
+        case OPERATOR_LESS_LESS: return "<<";
+        case OPERATOR_GREATER_GREATER: return ">>";
+        case OPERATOR_AMP_AMP: return "&&";
+        case OPERATOR_PIPE_PIPE: return "||";
         case OPERATOR_LEFT_PAREN: return "(";
         case OPERATOR_LEFT_BRACKET: return "[";
         case OPERATOR_BANG_EQUAL: return "!=";

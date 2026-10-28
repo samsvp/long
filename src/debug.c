@@ -28,6 +28,10 @@ static const char* op_name(vm_instructions op)
         case OP_MUL: return "mul";
         case OP_DIV: return "div";
         case OP_MOD: return "mod";
+        case OP_SHIFT_LEFT: return "shift_left";
+        case OP_SHIFT_RIGHT: return "shift_right";
+        case OP_BIT_AND: return "bit_and";
+        case OP_BIT_OR: return "bit_or";
         case OP_EQUALS: return "equals";
         case OP_NOT_EQUALS: return "not_equals";
         case OP_GREATER: return "greater";
@@ -199,6 +203,10 @@ void print_chunk(chunk_t chunk)
             case OP_MUL:
             case OP_DIV:
             case OP_MOD:
+            case OP_SHIFT_LEFT:
+            case OP_SHIFT_RIGHT:
+            case OP_BIT_AND:
+            case OP_BIT_OR:
             case OP_EQUALS:
             case OP_NOT_EQUALS:
             case OP_GREATER:

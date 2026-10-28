@@ -232,19 +232,26 @@ static precedence infix_prec(operator_kind op)
         case OPERATOR_BANG_EQUAL:
         case OPERATOR_EQUAL_EQUAL:
             return (precedence){ .left = 7, .right = 8, .has_right = true };
+        case OPERATOR_PIPE_PIPE:
+            return (precedence){ .left = 9, .right = 10, .has_right = true };
+        case OPERATOR_AMP_AMP:
+            return (precedence){ .left = 10, .right = 11, .has_right = true };
+        case OPERATOR_LESS_LESS:
+        case OPERATOR_GREATER_GREATER:
+            return (precedence){ .left = 11, .right = 12, .has_right = true };
         case OPERATOR_PLUS:
         case OPERATOR_MINUS:
-            return (precedence){ .left = 9, .right = 10, .has_right = true };
+            return (precedence){ .left = 12, .right = 13, .has_right = true };
         case OPERATOR_STAR:
         case OPERATOR_SLASH:
         case OPERATOR_PERCENT:
-            return (precedence){ .left = 11, .right = 12, .has_right = true };
+            return (precedence){ .left = 14, .right = 15, .has_right = true };
         case OPERATOR_DOUBLE_COLON:
         case OPERATOR_DOT:
-            return (precedence){ .left = 18, .right = 19, .has_right = true };
+            return (precedence){ .left = 21, .right = 22, .has_right = true };
         case OPERATOR_LEFT_PAREN:
         case OPERATOR_LEFT_BRACKET:
-            return (precedence){ .left = 15, .right = 0, .has_right = false };
+            return (precedence){ .left = 18, .right = 0, .has_right = false };
     }
     return (precedence){ .left = 0, .right = 0, .has_right = false };
 }
@@ -961,7 +968,7 @@ static sexpr_t parse_prefix(scanner_t* s, ctx_t* ctx, token_t start_token, const
         } else if (start_token.operator == OPERATOR_LEFT_BRACKET) {
             lhs = parse_list(s, ctx, start_token, kind_pattern(TOKEN_RIGHT_BRACKET), a);
         } else if (start_token.operator == OPERATOR_MINUS) {
-            sexpr_t rhs = parse_expr(s, ctx, 13, a);
+            sexpr_t rhs = parse_expr(s, ctx, 16, a);
             sexpr_t items[] = { atom_sexpr(start_token), rhs };
             lhs = cons_of(items, 2, a);
         } else {

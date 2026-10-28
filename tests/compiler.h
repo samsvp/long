@@ -502,8 +502,8 @@ static inline void sv_test_compiler_for(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("if (for c in \"abc\" do c end) == \"c\" do 1 else 0 end", 1));
    sv_test_run(t, sv_test_compiler_num("if (for c in \"aé😀\" do c end) == \"😀\" do 1 else 0 end", 1));
    sv_test_run(t, sv_test_compiler_num("if (for c in \"ab\" do c + \"!\" end) == \"b!\" do 1 else 0 end", 1));
-   sv_test_run(t, sv_test_compiler_kind("for x in [] do x end", VALUE_OBJ));
-   sv_test_run(t, sv_test_compiler_kind("for c in \"\" do c end", VALUE_OBJ));
+   sv_test_run(t, sv_test_compiler_kind("for x in [] do x end", VALUE_NIL));
+   sv_test_run(t, sv_test_compiler_kind("for c in \"\" do c end", VALUE_NIL));
    sv_test_run(t, sv_test_compiler_runtime_err("for x in 5 do x end") == VM_ERR_OP_UNSUPPORTED_ARGS);
 
    /* The loop variable may be a pattern. A `for` evaluates to its last body value,
@@ -544,7 +544,7 @@ static inline void sv_test_compiler_for_map(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num(
       "for {key, value} in %{\"a\": 7, \"b\": 7, \"c\": 7} do value end", 7));
 
-   sv_test_run(t, sv_test_compiler_kind("for kv in %{} do kv end", VALUE_OBJ));
+   sv_test_run(t, sv_test_compiler_kind("for kv in %{} do kv end", VALUE_NIL));
 
    sv_test_run(t, sv_test_compiler_num("for {key, value} in %{0: \"z\"} do key end", 0));
    sv_test_run(t, sv_test_compiler_num(

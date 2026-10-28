@@ -362,7 +362,15 @@ token_t scanner_next(scanner_t* s, ctx_t* ctx)
         case '|':
             if (next_char_if_eq(s, '>'))
                 return operator_of(s, OPERATOR_PIPE_FORWARD);
+            if (next_char_if_eq(s, '|'))
+                return operator_of(s, OPERATOR_PIPE_PIPE);
             return token_of(s, TOKEN_PIPE);
+        case '&':
+            if (next_char_if_eq(s, '&'))
+                return operator_of(s, OPERATOR_AMP_AMP);
+            next_codepoint(s);
+            return slice_error_token(s, ctx, SCANNER_ERROR_UNKNOWN_TOKEN,
+                                     "Unknown token", initial_i);
         case '!':
             if (next_char_if_eq(s, '='))
                 return operator_of(s, OPERATOR_BANG_EQUAL);
@@ -372,10 +380,14 @@ token_t scanner_next(scanner_t* s, ctx_t* ctx)
         case '>':
             if (next_char_if_eq(s, '='))
                 return operator_of(s, OPERATOR_GREATER_EQUAL);
+            if (next_char_if_eq(s, '>'))
+                return operator_of(s, OPERATOR_GREATER_GREATER);
             return operator_of(s, OPERATOR_GREATER);
         case '<':
             if (next_char_if_eq(s, '='))
                 return operator_of(s, OPERATOR_LESS_EQUAL);
+            if (next_char_if_eq(s, '<'))
+                return operator_of(s, OPERATOR_LESS_LESS);
             return operator_of(s, OPERATOR_LESS);
         case '=':
             if (next_char_if_eq(s, '='))

@@ -179,6 +179,11 @@ sv_opt_t(error_t) vm_run(vm_t* vm)
     return vm_run_frame(vm);
 }
 
+static bool is_safe_int(double x)
+{
+    return x == floor(x) && fabs(x) <= 0x1p53;
+}
+
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 {
 #define TRY_NOT_NULL(v, err_msg) TRY_OR((v) != NULL, (void)0, err_msg)
@@ -261,6 +266,31 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
     TRY_PUSH_STACK(res);                                                                                      \
     break; }
 
+#define INT_BIN_OP(sym, is_shift, expr, overflowed) {                                                         \
+    value_t v2 = sv_vec_pop(stack);                                                                           \
+    value_t v1 = sv_vec_pop(stack);                                                                           \
+    if (!IS_NUMBER(v1) || !IS_NUMBER(v2))                                                                     \
+        RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v1, a); value_free(&v2, a),                             \
+              "Invalid operands for '%s': %s and %s", sym, TYPE_NAME(v1), TYPE_NAME(v2));                     \
+    if (!is_safe_int(v1.number) || !is_safe_int(v2.number))                                                   \
+        RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0,                                                            \
+              "Operands for '%s' must be integers between -2^53 and 2^53, got %g and %g",                     \
+              sym, v1.number, v2.number);                                                                     \
+    int64_t x = v1.number;                                                                                    \
+    int64_t y = v2.number;                                                                                    \
+    if ((is_shift) && (y < 0 || y > 63))                                                                      \
+        RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0,                                                            \
+              "Shift amount must be between 0 and 63, got %g", v2.number);                                    \
+    int64_t r = (expr);                                                                                       \
+    if (overflowed)                                                                                           \
+        RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0, "Result of '%s' overflowed", sym);                         \
+    if (r < -(INT64_C(1) << 53) || r > (INT64_C(1) << 53))                                                    \
+        RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0,                                                            \
+              "Result of '%s' is outside -2^53 to 2^53", sym);                                                \
+    value_t res = {.kind = VALUE_NUMBER, .number = (double)r};                                                \
+    TRY_PUSH_STACK(res);                                                                                      \
+    break; }
+
 #define MATH_OP(op) NUM_BIN_OP(op, VALUE_NUMBER, number)
 #define CMP_OP(op) NUM_BIN_OP(op, VALUE_BOOL, boolean)
 
@@ -296,6 +326,10 @@ break; }
         case OP_SUB: MATH_OP(-)
         case OP_MUL: MATH_OP(*)
         case OP_DIV: MATH_OP(/)
+        case OP_SHIFT_LEFT: INT_BIN_OP("<<", true, (int64_t)((uint64_t)x << y), (r >> y) != x)
+        case OP_SHIFT_RIGHT: INT_BIN_OP(">>", true, x >> y, false)
+        case OP_BIT_AND: INT_BIN_OP("&&", false, x & y, false)
+        case OP_BIT_OR: INT_BIN_OP("||", false, x | y, false)
         case OP_EQUALS: EQUALS(true)
         case OP_NOT_EQUALS: EQUALS(false)
         case OP_GREATER: CMP_OP(>)
