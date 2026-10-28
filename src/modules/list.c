@@ -365,11 +365,8 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
 
     list_t l = AS_LIST(args[0]);
     int64_t count = ll_count(l);
-    if (k > count) {
-        value_t ret = value_wrap_list(ll_empty(), a);
-        CHECK_OOM(ret.obj.cell);
-        return ret;
-    }
+    if (k > count)
+        return value_borrow(args[0]);
     int64_t k_size = k;
 
     if (k_size == 0) {

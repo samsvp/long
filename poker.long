@@ -89,32 +89,27 @@ fun is_full_house(hand) match hand |> list::map(fun (c) c.rank)
 end
 
 fun best_hand(hand) do
-    hands =
-        hand
-        |> list::sort_by(fun (c) c.rank)
-        |> list::combinations(5)
+    fns = [ is_straight_flush
+          , is_four
+          , is_full_house
+          , is_flush
+          , is_straight
+          , is_three
+          , is_two_pair
+          , is_two ]
 
-    fun score(hand, fns) match fns
-    | [fn, ..tail] do
-        if hand_rank = fn(hand) do
-            hand_rank
-        else
-            score(hand, tail)
+    hand
+    |> list::sort_by(fun (c) c.rank)
+    |> list::combinations(5)
+    |> list::map(fun [fns](h) do
+        fun score(hand, fns) match fns
+        | [fn, .._] when hand_rank = fn(hand) do hand_rank
+        | [fn, ..tail] do score(hand, tail)
+        | [] do { kind: :one, hand: [hand[-1]] }
         end
-    | [] do
-        { kind: :one, hand }
-    end
 
-    map h in hands do
-        score(h, [ is_straight_flush
-                 , is_four
-                 , is_full_house
-                 , is_flush
-                 , is_straight
-                 , is_three
-                 , is_two_pair
-                 , is_two ])
-    end
+        score(h, fns)
+    end)
     |> list::max_by(fun (h) hand_score(h))
 end
 
