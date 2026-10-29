@@ -487,7 +487,7 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
     sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
         value_t x = value_borrow(maybe_x.value);
-        vs.arr[vs.size++] = x;
+        vs.arr[count - ++vs.size] = x;
     }
 
     sort_ctx_t ctx = {
@@ -590,3 +590,64 @@ value_t ntvl_min_by(const value_t* args, uint8_t n, vm_t* vm)
 value_t ntvl_max_by(const value_t* args, uint8_t n, vm_t* vm)
 { return min_max(args, n, true, vm); }
 
+value_t ntvl_count(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    iterable_t iter = iter_init(args[0], vm->ctx.alloc);
+    if (iter.self == NULL)
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+
+    double count = 0;
+    sv_opt_t(value_t) next = sv_opt_none_t(value_t);
+    while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some)
+        count += value_eql(next.value, args[1]);
+
+    return (value_t){.kind = VALUE_NUMBER, .number = count};
+}
+
+value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    iterable_t iter = iter_init(args[0], vm->ctx.alloc);
+    if (iter.self == NULL)
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+
+    double count = 0;
+    sv_opt_t(value_t) next = sv_opt_none_t(value_t);
+    while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some) {
+        value_t ret = vm_call_value(vm, args[1], &next.value, 1);
+        UNWRAP_ERR(ret);
+        count += !IS_FALSEY(ret);
+        value_free(&ret, vm->ctx.alloc);
+    }
+
+    return (value_t){.kind = VALUE_NUMBER, .number = count};
+}
+
+value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    const sv_allocator_t* a = vm->ctx.alloc;
+
+    iterable_t iter = iter_init(args[0], a);
+    if (iter.self == NULL)
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+
+    int64_t count = iterable_len(&iter);
+
+    sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
+    if (vec.arr == NULL) {
+        iter_deinit(&iter, a);
+        return oom_error(&vm->ctx);
+    }
+
+    sv_opt_t(value_t) v = sv_opt_none_t(value_t);
+    while (v = iterable_next(&iter, a), v.is_some)
+        vec.arr[vec.size++] = value_borrow(v.value);
+
+    iter_deinit(&iter, a);
+    return value_from_list(vec, vm);
+}

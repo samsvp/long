@@ -91,5 +91,17 @@ value_t ntvl_min(const value_t*, uint8_t, vm_t*);
  * min_by(lst, f): returns the element of lst where f(elem) is the minimum.
  */
 value_t ntvl_min_by(const value_t*, uint8_t, vm_t*);
+/**
+ * rev(lst): returns the reversed list.
+ */
+value_t ntvl_rev(const value_t*, uint8_t, vm_t*);
+/**
+ * count(lst, val): returns the amount of times val appears in lst.
+ */
+value_t ntvl_count(const value_t*, uint8_t, vm_t*);
+/**
+ * count_by(lst, f): maps f to each element of lst and counts the amount of times f(x) is truthy.
+ */
+value_t ntvl_count_by(const value_t*, uint8_t, vm_t*);
 
 #endif
