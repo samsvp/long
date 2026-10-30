@@ -27,7 +27,7 @@ value_t ntv_printf(const value_t*, uint8_t, vm_t*);
  * printf(str, list) Prints the list of values to stdout given the format string.
  * Use %v to print a value. Adds a new line at the end.
  */
-value_t ntv_printfln(const value_t*, uint8_t, vm_t*);
+value_t ntv_printlnf(const value_t*, uint8_t, vm_t*);
 /**
  * Prints one value to stdout and adds a new line.
  */

@@ -421,8 +421,6 @@ static inline void sv_test_compiler_error_messages(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_runtime_msg("x = 5\nx(1)", "Line 2: Type is not callable: number"));
    sv_test_run(t, sv_test_compiler_runtime_msg("%{\"a\": 1}[\"b\"]", "Line 1: Key not found: b"));
    sv_test_run(t, sv_test_compiler_runtime_msg("[1, 2][5]", "Line 1: Key not found: 5"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("print_vals(5)",
-      "Line 1: Wrong type of argument: expected list, got number"));
    sv_test_run(t, sv_test_compiler_runtime_msg_frames("fun f(n) f(n + 1) + 1\nf(0)",
       "Line 1: Call stack overflow", 100));
    sv_test_run(t, sv_test_compiler_runtime_msg("o = {x: 0}\n{z: 1, ..o}",

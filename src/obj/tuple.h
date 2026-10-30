@@ -5,6 +5,7 @@
 #include "../common.h"
 #include "../std/allocator.h"
 #include "../std/option.h"
+#include "iterable.h"
 
 typedef struct tuple_t {
     value_t* items;
@@ -28,5 +29,14 @@ bool tuple_eql(tuple_t, tuple_t);
  * Returns the element at the index, counting from the end when negative, none when out of range.
  */
 sv_opt_t(value_t) tuple_get(tuple_t, int64_t);
+
+typedef struct {
+    sv_rc_t(obj_t) root;
+    uint8_t i;
+} tuple_iter_t;
+
+tuple_iter_t tuple_iter_init(value_t);
+void tuple_iter_deinit(tuple_iter_t*, const sv_allocator_t*);
+iterable_t tuple_iterable_init(tuple_iter_t*);
 
 #endif

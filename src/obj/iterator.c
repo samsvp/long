@@ -4,6 +4,7 @@
 #include "list.h"
 #include "map.h"
 #include "str.h"
+#include "tuple.h"
 
 iterable_t iter_init(value_t from, const sv_allocator_t* a)
 {
@@ -32,10 +33,16 @@ iterable_t iter_init(value_t from, const sv_allocator_t* a)
             *it = map_iter_init(AS_MAP(from));
             return map_iterable_init(it);
         }
+        case OBJ_TUPLE: {
+            tuple_iter_t* it = sv_malloc(a, sizeof(tuple_iter_t));
+            if (it == NULL)
+                break;
+            *it = tuple_iter_init(from);
+            return tuple_iterable_init(it);
+        }
         case OBJ_USER_VALUE:
         case OBJ_ITER:
         case OBJ_RECORD:
-        case OBJ_TUPLE:
         case OBJ_ERR:
         case OBJ_NATIVE_FN:
         case OBJ_CLOSURE:
