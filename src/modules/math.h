@@ -11,6 +11,10 @@
 } while (0)
 
 /**
+ * abs(x) Absolute value of x.
+ */
+value_t ntvm_abs(const value_t*, uint8_t, vm_t*);
+/**
  * sin(x) Sine of x (measured in radians)
  */
 value_t ntvm_sin(const value_t*, uint8_t, vm_t*);

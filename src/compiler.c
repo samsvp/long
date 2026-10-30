@@ -1683,6 +1683,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     };
     sv_str_t empty = sv_str_init("");
     native_fn_t math_fns[] = {
+        { .arity = 1, .name = "abs", .fn = ntvm_abs },
         { .arity = 1, .name = "sin", .fn = ntvm_sin },
         { .arity = 1, .name = "cos", .fn = ntvm_cos },
         { .arity = 1, .name = "tan", .fn = ntvm_tan },
@@ -1716,6 +1717,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 2, .name = "imap", .fn = ntvl_imap },
         { .arity = 2, .name = "ifilter", .fn = ntvl_ifilter },
         { .arity = 3, .name = "ireduce", .fn = ntvl_ireduce },
+        { .arity = 2, .name = "add", .fn = ntvl_add },
         { .arity = 2, .name = "zip", .fn = ntvl_zip },
         { .arity = 1, .name = "shuffle", .fn = ntvl_shuffle },
         { .arity = 3, .name = "map_window", .fn = ntvl_map_window },

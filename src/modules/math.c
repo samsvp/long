@@ -38,6 +38,7 @@ value_t ntvm_##name(const value_t* args, uint8_t n, vm_t* vm)                  \
     return NUMBER(c);                                                          \
 }
 
+UNARY(abs, NUMBER(fabs(x)))
 UNARY(sin, NUMBER(sin(x)))
 UNARY(cos, NUMBER(cos(x)))
 UNARY(tan, NUMBER(tan(x)))

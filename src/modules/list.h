@@ -28,6 +28,10 @@ value_t ntvl_reduce(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_ireduce(const value_t*, uint8_t, vm_t*);
 /**
+ * add(list1, list2): concatenates list1 and list2.
+ */
+value_t ntvl_add(const value_t*, uint8_t, vm_t*);
+/**
  * zip(lst1, lst2): zips two lists into a tuple of every element. Both must have the same length.
  */
 value_t ntvl_zip(const value_t*, uint8_t, vm_t*);
