@@ -1676,7 +1676,8 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 1, .name = "int", .fn = ntv_int },
         { .arity = 1, .name = "print", .fn = ntv_print },
         { .arity = 1, .name = "println", .fn = ntv_println },
-        { .arity = 1, .name = "print_vals", .fn = ntv_print_arr },
+        { .arity = 2, .name = "printf", .fn = ntv_printf },
+        { .arity = 2, .name = "printfln", .fn = ntv_printfln },
         { .arity = 2, .name = "randi", .fn = ntv_randi },
         { .arity = 2, .name = "randf", .fn = ntv_randf },
     };

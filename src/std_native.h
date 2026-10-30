@@ -19,13 +19,19 @@ void init_rand(void);
  */
 value_t ntv_print(const value_t*, uint8_t, vm_t*);
 /**
+ * printf(str, list) Prints the list of values to stdout given the format string.
+ * Use %v to print a value.
+ */
+value_t ntv_printf(const value_t*, uint8_t, vm_t*);
+/**
+ * printf(str, list) Prints the list of values to stdout given the format string.
+ * Use %v to print a value. Adds a new line at the end.
+ */
+value_t ntv_printfln(const value_t*, uint8_t, vm_t*);
+/**
  * Prints one value to stdout and adds a new line.
  */
 value_t ntv_println(const value_t*, uint8_t, vm_t*);
-/**
- * Prints every value in the array to stdout.
- */
-value_t ntv_print_arr(const value_t*, uint8_t, vm_t*);
 /**
  * Returns the length of an iterable.
  */

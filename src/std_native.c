@@ -1,5 +1,7 @@
 #include "std_native.h"
 
+#include "obj/iterator.h"
+#include "obj/iterable.h"
 #include "value.h"
 #include "std/allocator_std.h"
 #include "obj/list.h"
@@ -56,20 +58,77 @@ value_t ntv_println(const value_t* values, uint8_t n, vm_t* vm)
     return ret;
 }
 
-value_t ntv_print_arr(const value_t* values, uint8_t n, vm_t* vm)
+value_t ntv_printf(const value_t* values, uint8_t n, vm_t* vm)
 {
-    assert(n == 1);
+    assert(n == 2);
 
-    value_t maybe_list = values[0];
-    if (!IS_LIST(maybe_list))
-        return bad_arg_type_error(maybe_list, VALUE_OBJ, OBJ_LIST, &vm->ctx);
+    if (!IS_STR(values[0]))
+        return bad_arg_type_error(values[0], VALUE_OBJ, OBJ_STR, &vm->ctx);
 
-    ll_iter_t iter = ll_iter_init_no_borrow(AS_LIST(maybe_list));
-    for (sv_opt_t(value_t) v = ll_iter_next(&iter); v.is_some; v = ll_iter_next(&iter)) {
-        ntv_print(&v.value, 1, vm);
+    if (!IS_TUPLE(values[1]) && !IS_LIST(values[1]))
+        return bad_arg_type_error(values[1], VALUE_OBJ, OBJ_TUPLE, &vm->ctx);
+
+    iterable_t iter = iter_init(values[1], vm->ctx.alloc);
+    sv_str_t fmt_string = AS_STR(values[0]);
+
+
+    int64_t start_i = 0;
+    int64_t i = 0;
+    while (i < fmt_string.size) {
+        char c = fmt_string.chars[i++];
+        if (c != '%')
+            continue;
+
+        // fmt error
+        if (i == fmt_string.size) {
+            const char* err_msg = "Percent simbol '%%' without value descriptor. Use a double '%%%%' if you want to print '%%'";
+            return value_init_err(
+                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc, err_msg),
+                vm->ctx.alloc);
+        }
+
+        c = fmt_string.chars[i++];
+        if (c != '%' && c != 'v') {
+            const char* err_msg = "Unknown value descriptor '%c'";
+            return value_init_err(
+                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc, err_msg, c),
+                vm->ctx.alloc);
+        }
+
+        printf("%.*s", (int)(i - start_i - 2), fmt_string.chars + start_i);
+        if (c == 'v') {
+            sv_opt_t(value_t) print_value = iterable_next(&iter, vm->ctx.alloc);
+            if (!print_value.is_some) {
+                const char* err_msg = "No value left to print";
+                return value_init_err(
+                    error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc, err_msg),
+                    vm->ctx.alloc);
+            }
+            sv_str_t s = value_to_str(print_value.value, &vm->ctx);
+            if (s.chars == NULL)
+                return value_init_err(
+                    error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"),
+                    vm->ctx.alloc);
+            printf("%.*s", (int)s.size, s.chars);
+        }
+        else {
+            printf("%%");
+        }
+
+        start_i = i;
     }
-
+    if (start_i != i) {
+        printf("%.*s", (int)(i - start_i), fmt_string.chars + start_i);
+    }
     return value_nil;
+}
+
+value_t ntv_printfln(const value_t* values, uint8_t n, vm_t* vm)
+{
+    value_t ret = ntv_printf(values, n, vm);
+    if (!IS_ERR(ret))
+        printf("\n");
+    return ret;
 }
 
 value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
