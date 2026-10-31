@@ -23,6 +23,7 @@ actor_t actor_init(value_t, const actor_vtable_t*);
 void actor_free(actor_t*, const sv_allocator_t*);
 value_t actor_get(value_t, value_t, vm_t*);
 value_t actor_update(value_t, value_t, vm_t*);
+value_t actor_call(value_t, value_t, value_t, vm_t*);
 
 
 #endif

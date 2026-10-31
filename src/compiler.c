@@ -1883,6 +1883,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     native_fn_t actor_fns[] = {
         { .arity = 2, .name = "get", .fn = ntva_get },
         { .arity = 2, .name = "update", .fn = ntva_update },
+        { .arity = 3, .name = "call", .fn = ntva_call },
     };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },

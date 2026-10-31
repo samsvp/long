@@ -56,3 +56,11 @@ value_t actor_update(value_t actor_val, value_t value, vm_t* vm)
     actor->state = new_state;
     return value_borrow(actor_val);
 }
+
+value_t actor_call(value_t actor, value_t update_arg, value_t call_arg, vm_t* vm)
+{
+    value_t ret = actor_update(actor, update_arg, vm);
+    if (IS_ERR(ret))
+        return ret;
+    return actor_get(actor, call_arg, vm);
+}
