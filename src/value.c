@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "value.h"
+#include "obj/actor.h"
 #include "obj/list.h"
 #include "obj/map.h"
 #include "obj/iterator.h"
@@ -116,6 +117,7 @@ bool value_eql(value_t x, value_t y)
                 case OBJ_ITER:
                 case OBJ_CLOSURE:
                 case OBJ_CLOSURE_MEMBER:
+                case OBJ_ACTOR:
                 case OBJ_ERR: // maybe errors should have structural equality
                     return ox == oy;
             }
@@ -128,6 +130,7 @@ bool value_eql(value_t x, value_t y)
 static void obj_free(obj_t* o, const sv_allocator_t* a)
 {
     switch (o->kind) {
+        case OBJ_ACTOR: actor_free(&o->actor, a); break;
         case OBJ_STR: sv_str_deinit(&o->str, a); break;
         case OBJ_LIST: ll_deinit(&o->list, a); break;
         case OBJ_MAP: map_deinit(&o->map, a); break;
@@ -192,6 +195,11 @@ value_t value_wrap_map(hashmap_t map, const sv_allocator_t* a)
 value_t value_init_err(error_t err, const sv_allocator_t* a)
 {
     return obj_wrap((obj_t){ .kind = OBJ_ERR, .err = err }, a);
+}
+
+value_t value_wrap_actor(actor_t* actor, const sv_allocator_t* a)
+{
+    return obj_wrap((obj_t){ .kind = OBJ_ACTOR, .actor = *actor }, a);
 }
 
 value_t value_init_native(native_fn_t fn, const sv_allocator_t* a)
@@ -308,6 +316,7 @@ const char* value_kind_str(value_kind v_kind, obj_kind o_kind)
         case VALUE_NUMBER: return "number";
         case VALUE_ATOM: return "atom";
         case VALUE_OBJ: switch (o_kind) {
+            case OBJ_ACTOR: return "actor";
             case OBJ_ITER: return "iter";
             case OBJ_ERR: return "error";
             case OBJ_STR: return "string";
@@ -402,6 +411,12 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
         }
         case OBJ_ITER: {
             const char* name = AS_ITER(v).vtable->name;
+            return sv_strb_add(b, name, (int64_t)strlen(name), a) >= 0;
+        }
+        case OBJ_ACTOR: {
+            const char* name = AS_ACTOR(v).vtable->name;
+            const char* actor_str = "Actor: ";
+            CHECK(sv_strb_add(b, actor_str, (int64_t)strlen(actor_str), a) > 0);
             return sv_strb_add(b, name, (int64_t)strlen(name), a) >= 0;
         }
         case OBJ_CLOSURE: {

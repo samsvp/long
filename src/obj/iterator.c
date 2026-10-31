@@ -40,6 +40,7 @@ iterable_t iter_init(value_t from, const sv_allocator_t* a)
             *it = tuple_iter_init(from);
             return tuple_iterable_init(it);
         }
+        case OBJ_ACTOR:
         case OBJ_USER_VALUE:
         case OBJ_ITER:
         case OBJ_RECORD:

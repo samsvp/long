@@ -5,6 +5,7 @@
 #include "std/vector.h"
 #include "std/rc.h"
 
+typedef struct actor_t actor_t;
 typedef struct fn_t fn_t;
 
 sv_vec_def(int64_t);

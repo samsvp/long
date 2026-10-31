@@ -51,6 +51,9 @@ void vm_deinit(vm_t* vm)
     thm_deinit(&vm->globals_names_to_index.name_indexes, a);
     map_deinit(&vm->ctx.record_fields, a);
     fn_deinit(&vm->fn, a);
+    sv_vec_foreach(actor_vtable_t, vt, &vm->actor_vtables)
+        sv_free(a, (char*)vt.name);
+    sv_vec_deinit(&vm->actor_vtables, a);
 }
 
 static call_frame_t init_frame(fn_t* fn, int64_t locals_offset, int64_t stack_offset,
@@ -153,7 +156,8 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
 value_t vm_call_name(vm_t* vm, value_t* args, uint8_t arg_count,
                      sv_str_t function_name, sv_str_t file_name)
 {
-    sv_opt_t(uint32_t) index = globals_get(vm->globals_names_to_index, function_name, file_name, vm->ctx.alloc);
+    sv_opt_t(uint32_t) index = globals_get(vm->globals_names_to_index, function_name, file_name, NULL,
+                                           vm->ctx.alloc);
     if (!index.is_some)
         return value_init_err(error_fmt(VM_ERR_UNDEFINED_VARIABLE, 0, vm->ctx.alloc, "Undefined global"),
                               vm->ctx.alloc);
@@ -655,6 +659,27 @@ break; }
                       "Type has no length: %s", TYPE_NAME(val));
             value_free(&val, a);
             TRY_PUSH_STACK(ret);
+            break;
+        }
+        case OP_ACTOR_VTABLE: {
+            uint32_t i = 0;
+            READ_ARG(i);
+            value_t get_fn = sv_vec_pop(stack);
+            value_t update_fn = sv_vec_pop(stack);
+            vm->actor_vtables.arr[i].update_fn = update_fn;
+            vm->actor_vtables.arr[i].get_fn = get_fn;
+            value_free(&update_fn, a);
+            value_free(&get_fn, a);
+            break;
+        }
+        case OP_ACTOR: {
+            uint32_t i = 0;
+            READ_ARG(i);
+            value_t state = sv_vec_pop(stack);
+            actor_t actor = actor_init(state, &vm->actor_vtables.arr[i]);
+            value_t v = value_wrap_actor(&actor, a);
+            TRY_OR(v.obj.cell != NULL, value_free(&state, a), "when creating actor");
+            TRY_PUSH_OWNED(v);
             break;
         }
         case OP_ITER_CREATE: {

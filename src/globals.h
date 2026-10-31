@@ -16,7 +16,8 @@ typedef enum {
 
 uint32_t globals_add(globals_t* g, sv_str_t id, sv_str_t prefix, int64_t line, ctx_t* ctx,
                      const sv_allocator_t* scratch);
-sv_opt_t(uint32_t) globals_get(const globals_t g, sv_str_t id, sv_str_t prefix, const sv_allocator_t*);
+sv_opt_t(uint32_t) globals_get(const globals_t g, sv_str_t id, sv_str_t prefix, const char* outer,
+                               const sv_allocator_t*);
 
 sv_opt_t(uint32_t) names_get(transient_hashmap_t names, sv_str_t id, const sv_allocator_t*);
 

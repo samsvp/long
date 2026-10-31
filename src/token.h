@@ -53,6 +53,7 @@ typedef enum {
 } operator_kind;
 
 typedef enum {
+    FN_ACTOR,
     FN_FUN,
     FN_FOR,
     FN_IF,

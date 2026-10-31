@@ -45,6 +45,8 @@ static const char* op_name(vm_instructions op)
         case OP_GET_MEMBER: return "get_member";
         case OP_SET_GLOBAL: return "set_global";
         case OP_GET_GLOBAL: return "get_global";
+        case OP_ACTOR: return "actor";
+        case OP_ACTOR_VTABLE: return "actor_vtable";
         case OP_SET_LOCAL: return "set_local";
         case OP_GET_LOCAL: return "get_local";
         case OP_GET_UPVALUE: return "get_upvalue";
@@ -178,6 +180,8 @@ void print_chunk(chunk_t chunk)
             case OP_POP_LOCAL:
             case OP_LOAD_CONSTANT:
             case OP_GET_GLOBAL:
+            case OP_ACTOR:
+            case OP_ACTOR_VTABLE:
             case OP_GET_LOCAL:
             case OP_GET_UPVALUE:
             case OP_RECORD_GET:

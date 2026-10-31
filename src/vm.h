@@ -55,6 +55,8 @@ typedef struct vm_t {
     value_arr locals;
     value_arr stack;
 
+    sv_vec_t(actor_vtable_t) actor_vtables;
+
     vm_ctx_t ctx;
 } vm_t;
 
@@ -126,6 +128,8 @@ typedef enum {
     // takes list len from stack
     OP_LIST_STACK,
     OP_LIST_FILTER,
+    OP_ACTOR,
+    OP_ACTOR_VTABLE,
     OP_HASHMAP,
     OP_RECORD,
     OP_TUPLE,

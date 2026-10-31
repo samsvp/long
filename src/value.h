@@ -41,6 +41,7 @@ typedef struct value_t {
 #define IS_BOOL(v) ((v).kind == VALUE_BOOL)
 #define IS_C(v) ((v).kind == VALUE_C)
 #define IS_STR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_STR)
+#define IS_ACTOR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_ACTOR)
 #define IS_ERR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_ERR)
 #define IS_LIST(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_LIST)
 #define IS_CONS(v) (IS_LIST(v) && !ll_is_empty(AS_LIST(v)))
@@ -58,6 +59,7 @@ typedef struct value_t {
 #define AS_BOOL(v) ((v).boolean)
 #define AS_C(v) ((v).c)
 #define AS_STR(v) ((v).obj.cell->value.str)
+#define AS_ACTOR(v) ((v).obj.cell->value.actor)
 #define AS_ERR(v) ((v).obj.cell->value.err)
 #define AS_LIST(v) ((v).obj.cell->value.list)
 #define AS_NATIVE(v) ((v).obj.cell->value.fn)
@@ -109,11 +111,14 @@ value_t value_init_list(const value_t*, int64_t, const sv_allocator_t*);
 value_t value_init_list_filter(const value_t*, int64_t, const sv_allocator_t*);
 value_t value_wrap_list(list_t, const sv_allocator_t*);
 /**
- * Wraps an already built record or map into a value, taking ownership. obj.cell is NULL
- * on allocation failure, and the object is then still the caller's to free.
+ * Wraps an already built record or map into a value, taking ownership.
  */
 value_t value_wrap_record(record_t, const sv_allocator_t*);
 value_t value_wrap_map(hashmap_t, const sv_allocator_t*);
+/**
+ * Wraps an actor into a value.
+ */
+value_t value_wrap_actor(actor_t*, const sv_allocator_t*);
 /**
  * Creates an iterator value borrowing the given list value. The value must
  * hold an iterable object. obj.cell is NULL on allocation failure.

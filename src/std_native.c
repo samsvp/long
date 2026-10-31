@@ -170,6 +170,7 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
     case OBJ_ITER:
         ret.number = (double)iterable_len(&AS_ITER(v));
         break;
+    case OBJ_ACTOR:
     case OBJ_TUPLE:
     case OBJ_ERR:
     case OBJ_RECORD:

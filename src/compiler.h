@@ -40,11 +40,13 @@ typedef struct compiler_t {
     fail_target_t* fail_targets;
 
     const char* current_path;
+    const char* outer_path;
     module_map_t modules;
     module_scope_t* module_scope;
 
     fn_builder_t builder;
     sv_vec_t(value_t) global_values;
+    sv_vec_t(actor_vtable_t) actor_vtables;
 
     sv_arena_t* arena;
     const sv_allocator_t* scratch;  // the arena as an allocator

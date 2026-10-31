@@ -683,6 +683,36 @@ static sexpr_t parse_fun(scanner_t* s, ctx_t* ctx, token_t fun_token, const sv_a
     return cons_sexpr(list);
 }
 
+static sexpr_t parse_actor(scanner_t* s, ctx_t* ctx, token_t actor_token, const sv_allocator_t* a)
+{
+    sv_vec_t(sexpr_t) list = sv_vec_init(sexpr_t);
+    push_sexpr(&list, atom_sexpr(actor_token), a);
+
+    // actor name
+    token_t id = parser_expect_id(s, ctx, a);
+    push_sexpr(&list, atom_sexpr(id), a);
+
+    // argument must be an id
+    token_t left_paren = parser_expect(s, ctx, op_pattern(OPERATOR_LEFT_PAREN), a);
+    token_t arg_name_id = parser_expect_id(s, ctx, a);
+    parser_expect_close(s, ctx, left_paren, kind_pattern(TOKEN_RIGHT_PAREN), a);
+    push_sexpr(&list, atom_sexpr(arg_name_id), a);
+
+    parser_expect(s, ctx, kw_pattern(KEYWORD_DO), a);
+    token_t fun_token;
+    while (parser_check(s, ctx, fn_pattern(FN_FUN), &fun_token)) {
+        sexpr_t fun = parse_fun(s, ctx, fun_token, a);
+        push_sexpr(&list, fun, a);
+    }
+
+
+    token_t end_token;
+    if (!parser_check(s, ctx, kw_pattern(KEYWORD_END), &end_token))
+        unexpected_token(ctx, parser_peek(s, ctx), "Expected 'fun' or 'end' in actor, got", a);
+
+    return cons_sexpr(list);
+}
+
 static sexpr_t parse_import(scanner_t* s, ctx_t* ctx, token_t import_token, const sv_allocator_t* a)
 {
     sv_vec_t(sexpr_t) list = sv_vec_init_capacity(sexpr_t, 3, a);
@@ -1069,6 +1099,8 @@ static sexpr_t parse_form(scanner_t* s, ctx_t* ctx, token_t token, const sv_allo
             return parse_loop(s, ctx, token, a);
         case FN_MAPF:
             return parse_loop(s, ctx, token, a);
+        case FN_ACTOR:
+            return parse_actor(s, ctx, token, a);
         case FN_FUN:
             return parse_fun(s, ctx, token, a);
         case FN_LIST: {

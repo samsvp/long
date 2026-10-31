@@ -129,7 +129,7 @@ uint32_t globals_add(globals_t* g, sv_str_t id, sv_str_t prefix, int64_t line, c
     return index;
 }
 
-sv_opt_t(uint32_t) globals_get(const globals_t g, sv_str_t id, sv_str_t prefix, const sv_allocator_t* a)
+static sv_opt_t(uint32_t) get_prefixed(const globals_t g, sv_str_t id, sv_str_t prefix, const sv_allocator_t* a)
 {
     sv_str_t name = append_prefix(id, prefix, a);
     if (name.chars == NULL)
@@ -137,8 +137,14 @@ sv_opt_t(uint32_t) globals_get(const globals_t g, sv_str_t id, sv_str_t prefix, 
 
     sv_opt_t(uint32_t) maybe = names_get(g.name_indexes, name, a);
     sv_str_deinit(&name, a);
-    if (maybe.is_some)
-        return maybe;
+    return maybe;
+}
 
-    return names_get(g.name_indexes, id, a);
+sv_opt_t(uint32_t) globals_get(const globals_t g, sv_str_t id, sv_str_t prefix, const char* outer,
+                               const sv_allocator_t* a)
+{
+    sv_opt_t(uint32_t) maybe = get_prefixed(g, id, prefix, a);
+    if (!maybe.is_some && outer != NULL)
+        maybe = get_prefixed(g, id, sv_str_init(outer), a);
+    return maybe.is_some ? maybe : names_get(g.name_indexes, id, a);
 }

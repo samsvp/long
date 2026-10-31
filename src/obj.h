@@ -1,6 +1,7 @@
 #ifndef LONG_OBJ_H
 #define LONG_OBJ_H
 
+#include "obj/actor.h"
 #include "obj/user_value.h"
 #include "std/string.h"
 #include "common.h"
@@ -18,6 +19,7 @@ typedef enum {
     OBJ_TUPLE,
     OBJ_MAP,
     OBJ_ITER,
+    OBJ_ACTOR,
     OBJ_NATIVE_FN,
     OBJ_CLOSURE,
     OBJ_CLOSURE_MEMBER,
@@ -39,6 +41,7 @@ typedef struct obj_t {
         closure_t closure;
         closure_member_t closure_member;
         user_value_t uservalue;
+        actor_t actor;
         error_t err;
     };
     obj_kind kind;

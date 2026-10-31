@@ -1,5 +1,6 @@
 #include "modules/list.h"
 #include "modules/math.h"
+#include "modules/actor.h"
 #define SV_ARENA_IMPLEMENTATION
 #include "std/arena.h"
 #include <assert.h>
@@ -20,6 +21,7 @@
 
 static void compile_sexpr(compiler_t* c, sexpr_t sexpr, bool is_tail, ctx_t* ctx);
 static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx_t* ctx);
+static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, int64_t line, ctx_t* ctx);
 
 typedef struct {
     const char* name;
@@ -71,6 +73,7 @@ static compiler_t* compiler_init(const char* base_path, sv_arena_t* arena, const
         .members = { .depth = 0 },
         .builder = fnb_init(sv_str_init("")),
         .global_values = sv_vec_init(value_t),
+        .actor_vtables = sv_vec_init(actor_vtable_t),
         .current_path = base_path,
         .modules = modules,
         .arena = arena,
@@ -113,6 +116,9 @@ static void compiler_abort(compiler_t* c, ctx_t* ctx)
     thm_deinit(&c->globals.name_indexes, &ctx->alloc);
     thm_deinit(c->record_fields, &ctx->alloc);
     thm_deinit(c->atoms, &ctx->alloc);
+    sv_vec_foreach(actor_vtable_t, vt, &c->actor_vtables)
+        sv_free(&ctx->alloc, (char*)vt.name);
+    sv_vec_deinit(&c->actor_vtables, &ctx->alloc);
 }
 
 _Noreturn static void compiler_file_error(ctx_t* ctx, const char* path, int64_t line, int err)
@@ -344,7 +350,8 @@ static void compile_id(compiler_t* c, sv_str_t id, int64_t line, ctx_t* ctx)
         emit_wide(c, ctx, OP_GET_LOCAL, idx.value, line);
     else if ((idx = locals_get(&c->upvalues, id, c->scratch)).is_some)
         emit_wide(c, ctx, OP_GET_UPVALUE, idx.value, line);
-    else if ((idx = globals_get(c->globals, id, sv_str_init(c->current_path), c->scratch)).is_some)
+    else if ((idx = globals_get(c->globals, id, sv_str_init(c->current_path), c->outer_path,
+                                c->scratch)).is_some)
         emit_wide(c, ctx, OP_GET_GLOBAL, idx.value, line);
     else if ((idx = names_get(c->members, id, c->scratch)).is_some)
         emit_narrow(c, ctx, OP_GET_MEMBER, idx.value, "closure group members", line);
@@ -764,20 +771,46 @@ static void compile_dot(compiler_t* c, const sexpr_t* args, int64_t n, int64_t l
     emit2(c, ctx, OP_RECORD_GET, (uint8_t)id, line);
 }
 
+static char* actor_path(sv_str_t module_path, sv_str_t name, const sv_allocator_t* a)
+{
+    size_t size = (size_t)module_path.size + 2 + (size_t)name.size;
+    char* path = sv_malloc(a, size + 1);
+    if (path == NULL)
+        return NULL;
+    memcpy(path, module_path.chars, (size_t)module_path.size);
+    memcpy(path + module_path.size, "::", 2);
+    memcpy(path + module_path.size + 2, name.chars, (size_t)name.size);
+    path[size] = '\0';
+    return path;
+}
+
+static sv_str_t module_path(compiler_t* c, sexpr_t e, int64_t line, ctx_t* ctx)
+{
+    if (e.tag == S_CONS && e.cons.size == 3 && e.cons.arr[0].tag == S_ATOM
+        && e.cons.arr[0].atom.kind == TOKEN_OPERATOR
+        && e.cons.arr[0].atom.operator == OPERATOR_DOUBLE_COLON) {
+        sv_str_t outer = module_path(c, e.cons.arr[1], line, ctx);
+        char* path = actor_path(outer, expect_id(e.cons.arr[2], ctx), c->scratch);
+        if (path == NULL)
+            compiler_oom(ctx, line);
+        return sv_str_init(path);
+    }
+
+    sv_str_t name = expect_id(e, ctx);
+    sv_opt_t(value_t) path = thm_get(c->module_scope->var_to_modules, value_init_str(name, c->scratch));
+    if (!path.is_some)
+        compiler_error_name(ctx, C_ERR_UNDEFINED_VARIABLE, line, "Undefined variable", name);
+    return AS_STR(path.value);
+}
+
 static void compile_double_colon(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
 {
     if (n != 2)
         compiler_malformed(ctx, "field access", line);
 
-    sv_str_t module_name = expect_id(args[0], ctx);
+    sv_str_t path = module_path(c, args[0], line, ctx);
     sv_str_t var_name = expect_id(args[1], ctx);
-
-    value_t module_name_value = value_init_str(module_name, c->scratch);
-    sv_opt_t(value_t) module_path = thm_get(c->module_scope->var_to_modules, module_name_value);
-    if (!module_path.is_some)
-        compiler_error_name(ctx, C_ERR_UNDEFINED_VARIABLE, line, "Undefined variable", module_name);
-
-    sv_opt_t(uint32_t) id = globals_get(c->globals, var_name, AS_STR(module_path.value), c->scratch);
+    sv_opt_t(uint32_t) id = globals_get(c->globals, var_name, path, NULL, c->scratch);
     if (!id.is_some)
         compiler_error_name(ctx, C_ERR_UNDEFINED_VARIABLE, line, "Undefined variable", var_name);
 
@@ -1092,6 +1125,7 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
     fc->record_fields = c->record_fields;
     fc->atoms = c->atoms;
     fc->module_scope = c->module_scope;
+    fc->outer_path = c->outer_path;
     c->child = fc;
 
     if (cls != NULL) {
@@ -1237,6 +1271,108 @@ static void compile_fun_group(compiler_t* c, const sexpr_t* members, int64_t n, 
         if (i < n - 1)
             emit(c, ctx, OP_POP, line);
     }
+}
+
+static sv_opt_t(uint32_t) actor_fn(compiler_t* c, const char* fn, const char* path)
+{
+    sv_str_t id = sv_str_init(fn);
+    sv_opt_t(uint32_t) own = globals_get(c->globals, id, sv_str_init(path), NULL, c->scratch);
+    sv_opt_t(uint32_t) bare = names_get(c->globals.name_indexes, id, c->scratch);
+    return own.is_some && (!bare.is_some || bare.value != own.value) ? own : sv_opt_none_t(uint32_t);
+}
+
+static void check_actor_fn(const sexpr_t* fun, int64_t line, ctx_t* ctx)
+{
+    if (fun->cons.arr[1].tag == S_CONS)
+        return;
+
+    sv_str_t name = expect_id(fun->cons.arr[1], ctx);
+    char msg[128];
+    if (name.size == 0) {
+        snprintf(msg, sizeof(msg), "Actor functions must be named at line %" PRId64, line);
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+    }
+
+    bool handler = sv_str_comp(name, sv_str_init("update")) || sv_str_comp(name, sv_str_init("get"));
+    const sexpr_t* params = &fun->cons.arr[fun->cons.size == 5 ? 3 : 2];
+    if (handler && params->cons.size != 2) {
+        snprintf(msg, sizeof(msg), "Actor '%.*s' must take (state, msg) at line %" PRId64,
+                 (int)name.size, name.chars, line);
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+    }
+}
+
+static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
+{
+    if (n < 2)
+        compiler_malformed(ctx, "act", line);
+    if (c->locals != NULL) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Actors must be defined at the top level at line %" PRId64, line);
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+    }
+
+    sv_str_t name = expect_id(args[0], ctx);
+    expect_id(args[1], ctx);
+
+    const char* file_path = c->current_path;
+    char* path = actor_path(sv_str_init(file_path), name, c->scratch);
+    if (path == NULL)
+        compiler_oom(ctx, line);
+
+    c->current_path = path;
+    c->outer_path = file_path;
+    for (int64_t i = 2; i < n; i++) {
+        int64_t fun_line = args[i].cons.arr[0].atom.line;
+        check_actor_fn(&args[i], fun_line, ctx);
+        compile_fun(c, args[i].cons.arr + 1, args[i].cons.size - 1, fun_line, ctx);
+        emit(c, ctx, OP_POP, line);
+    }
+    c->outer_path = NULL;
+    c->current_path = file_path;
+
+    actor_vtable_t vtable = {
+        .name = sv_str_to_c_str(name, &ctx->alloc),
+        .update_fn = value_nil,
+        .get_fn = value_nil,
+    };
+    if (vtable.name == NULL)
+        compiler_oom(ctx, line);
+    int success = 0;
+    sv_vec_push(&c->actor_vtables, vtable, &success, &ctx->alloc);
+    if (!success) {
+        sv_free(&ctx->alloc, (char*)vtable.name);
+        compiler_oom(ctx, line);
+    }
+
+    sv_opt_t(uint32_t) fns[] = { actor_fn(c, "update", path), actor_fn(c, "get", path) };
+    for (int i = 0; i < 2; i++) {
+        if (fns[i].is_some)
+            emit_wide(c, ctx, OP_GET_GLOBAL, fns[i].value, line);
+        else
+            add_const(c, ctx, value_nil, line);
+    }
+    emit_wide(c, ctx, OP_ACTOR_VTABLE, (uint32_t)(c->actor_vtables.size - 1), line);
+
+    value_t path_value = value_init_str(sv_str_init(path), &ctx->alloc);
+    if (path_value.obj.cell == NULL)
+        compiler_oom(ctx, line);
+    module_put(&c->module_scope->var_to_modules, name, path_value, line, ctx);
+
+    sexpr_t new_items[] = {
+        { .tag = S_ATOM, .atom = { .kind = TOKEN_LITERAL, .line = line,
+            .literal = { .kind = LITERAL_IDENTIFIER, .literal = sv_str_init("actor-new") } } },
+        { .tag = S_ATOM, .atom = { .kind = TOKEN_LITERAL, .line = line,
+            .literal = { .kind = LITERAL_NUMBER, .number = (double)(c->actor_vtables.size - 1) } } },
+        args[1],
+    };
+    sexpr_t params[] = { args[1] };
+    sexpr_t constructor[] = {
+        args[0],
+        { .tag = S_CONS, .cons = { .arr = params, .size = 1 } },
+        { .tag = S_CONS, .cons = { .arr = new_items, .size = 3 } },
+    };
+    compile_fun(c, constructor, 3, line, ctx);
 }
 
 static int64_t live_locals(const compiler_t* c)
@@ -1385,6 +1521,11 @@ static bool compile_internal(compiler_t* c, sv_str_t name, const sexpr_t* args, 
         compile_sized_test(c, name, args, n, line, ctx);
     } else if (is_form(name, "has-field?")) {
         compile_has_field(c, args, n, line, ctx);
+    } else if (is_form(name, "actor-new")) {
+        if (n != 2)
+            compiler_malformed(ctx, "actor-new", line);
+        compile_sexpr(c, args[1], false, ctx);
+        emit_wide(c, ctx, OP_ACTOR, (uint32_t)args[0].atom.literal.number, line);
     } else if (is_form(name, "match-fail")) {
         if (n != 1)
             compiler_malformed(ctx, "match-fail", line);
@@ -1550,6 +1691,7 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
             case FN_HASHMAP: compile_hashmap(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_RECORD: compile_record(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_TUPLE: compile_tuple(c, cons + 1, n - 1, a.line, ctx); return;
+            case FN_ACTOR: compile_actor(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_FUN: compile_fun(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_LENGTH: compile_length(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_RECORD_GET_OR_NIL: compile_record_get_or_nil(c, cons + 1, n - 1, a.line, ctx); return;
@@ -1738,8 +1880,13 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 2, .name = "skip", .fn = ntvl_skip },
         { .arity = 2, .name = "combinations", .fn = ntvl_combinations },
     };
+    native_fn_t actor_fns[] = {
+        { .arity = 2, .name = "get", .fn = ntva_get },
+        { .arity = 2, .name = "update", .fn = ntva_update },
+    };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },
+        { .name = "actor", .native_fns = actor_fns, .native_count = sizeof(actor_fns) / sizeof(actor_fns[0]) },
         { .name = "list", .native_fns = list_fns, .native_count = sizeof(list_fns) / sizeof(list_fns[0]) },
     };
     for (size_t i = 0; i < sizeof(native_fns) / sizeof(native_fns[0]); i++)
@@ -1764,6 +1911,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     // the vm owns the result from here on, so these failures must not jump
     vm_t vm = vm_init(fnb_build(&c->builder), opts.max_frames, c->globals, &ctx->alloc);
     vm.globals = c->global_values;
+    vm.actor_vtables = c->actor_vtables;
     vm.ctx.alloc = &ctx->alloc;
     modules_deinit(c, ctx);
 
