@@ -3,3 +3,5 @@ build/
 *.out
 *.a
 *.so
+test.long
+teste.long
