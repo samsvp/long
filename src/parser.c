@@ -1099,7 +1099,7 @@ static sexpr_t parse_form(scanner_t* s, ctx_t* ctx, token_t token, const sv_allo
             return parse_loop(s, ctx, token, a);
         case FN_MAPF:
             return parse_loop(s, ctx, token, a);
-        case FN_ACTOR:
+        case FN_SERVER:
             return parse_actor(s, ctx, token, a);
         case FN_FUN:
             return parse_fun(s, ctx, token, a);

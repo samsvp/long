@@ -1,14 +1,10 @@
 ```elixir
 import actor("actor")
 
-act Stack(init) do
+server Stack(init) do
     # helper to pop data into the stack, namespaced by `Stack`
-    fun pop(stack) do
-        head = actor::get(stack, :head)
-        # returns the stack, meaning you can chain updates
-        actor::update(stack, :pop)
-        head
-    end
+    fun pop(stack)
+        actor::call(stack, :pop)
 
     # helper to push data into the stack
     fun push(stack, value)
@@ -36,6 +32,10 @@ act Stack(init) do
     | ([], :tail) do nil
     end
 
+    fun call(state, msg)
+    | ([head, ..tail], :pop) do (head, tail)
+    | ([], :pop) do (nil, [])
+    end
 end
 
 stack =

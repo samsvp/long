@@ -664,12 +664,15 @@ break; }
         case OP_ACTOR_VTABLE: {
             uint32_t i = 0;
             READ_ARG(i);
+            value_t call_fn = sv_vec_pop(stack);
             value_t get_fn = sv_vec_pop(stack);
             value_t update_fn = sv_vec_pop(stack);
             vm->actor_vtables.arr[i].update_fn = update_fn;
             vm->actor_vtables.arr[i].get_fn = get_fn;
+            vm->actor_vtables.arr[i].call_fn = call_fn;
             value_free(&update_fn, a);
             value_free(&get_fn, a);
+            value_free(&call_fn, a);
             break;
         }
         case OP_ACTOR: {

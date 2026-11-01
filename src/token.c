@@ -39,7 +39,7 @@ static const char* operator_text(operator_kind op)
 const char* special_fn_text(special_fn_kind fn)
 {
     switch (fn) {
-        case FN_ACTOR: return "act";
+        case FN_SERVER: return "server";
         case FN_FUN: return "fun";
         case FN_FOR: return "for";
         case FN_IF: return "if";

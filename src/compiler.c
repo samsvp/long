@@ -1293,7 +1293,9 @@ static void check_actor_fn(const sexpr_t* fun, int64_t line, ctx_t* ctx)
         compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
     }
 
-    bool handler = sv_str_comp(name, sv_str_init("update")) || sv_str_comp(name, sv_str_init("get"));
+    bool handler = sv_str_comp(name, sv_str_init("update"))
+                               || sv_str_comp(name, sv_str_init("get"))
+                               || sv_str_comp(name, sv_str_init("call"));
     const sexpr_t* params = &fun->cons.arr[fun->cons.size == 5 ? 3 : 2];
     if (handler && params->cons.size != 2) {
         snprintf(msg, sizeof(msg), "Actor '%.*s' must take (state, msg) at line %" PRId64,
@@ -1305,7 +1307,7 @@ static void check_actor_fn(const sexpr_t* fun, int64_t line, ctx_t* ctx)
 static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
 {
     if (n < 2)
-        compiler_malformed(ctx, "act", line);
+        compiler_malformed(ctx, "server", line);
     if (c->locals != NULL) {
         char msg[96];
         snprintf(msg, sizeof(msg), "Actors must be defined at the top level at line %" PRId64, line);
@@ -1335,6 +1337,7 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         .name = sv_str_to_c_str(name, &ctx->alloc),
         .update_fn = value_nil,
         .get_fn = value_nil,
+        .call_fn = value_nil,
     };
     if (vtable.name == NULL)
         compiler_oom(ctx, line);
@@ -1345,8 +1348,8 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         compiler_oom(ctx, line);
     }
 
-    sv_opt_t(uint32_t) fns[] = { actor_fn(c, "update", path), actor_fn(c, "get", path) };
-    for (int i = 0; i < 2; i++) {
+    sv_opt_t(uint32_t) fns[] = { actor_fn(c, "update", path), actor_fn(c, "get", path), actor_fn(c, "call", path) };
+    for (int i = 0; i < 3; i++) {
         if (fns[i].is_some)
             emit_wide(c, ctx, OP_GET_GLOBAL, fns[i].value, line);
         else
@@ -1691,7 +1694,7 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
             case FN_HASHMAP: compile_hashmap(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_RECORD: compile_record(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_TUPLE: compile_tuple(c, cons + 1, n - 1, a.line, ctx); return;
-            case FN_ACTOR: compile_actor(c, cons + 1, n - 1, a.line, ctx); return;
+            case FN_SERVER: compile_actor(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_FUN: compile_fun(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_LENGTH: compile_length(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_RECORD_GET_OR_NIL: compile_record_get_or_nil(c, cons + 1, n - 1, a.line, ctx); return;
@@ -1883,7 +1886,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     native_fn_t actor_fns[] = {
         { .arity = 2, .name = "get", .fn = ntva_get },
         { .arity = 2, .name = "update", .fn = ntva_update },
-        { .arity = 3, .name = "call", .fn = ntva_call },
+        { .arity = 2, .name = "call", .fn = ntva_call },
     };
     native_module_t native_mods[] = {
         { .name = "math", .native_fns = math_fns, .native_count = sizeof(math_fns) / sizeof(math_fns[0]) },

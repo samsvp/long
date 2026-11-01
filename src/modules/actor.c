@@ -23,8 +23,8 @@ value_t ntva_update(const value_t* args, uint8_t n, vm_t* vm)
 
 value_t ntva_call(const value_t* args, uint8_t n, vm_t* vm)
 {
-    assert(n == 3);
+    assert(n == 2);
     if (!IS_ACTOR(args[0]))
         return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ACTOR, &vm->ctx);
-    return actor_call(args[0], args[1], args[2], vm);
+    return actor_call(args[0], args[1], vm);
 }
