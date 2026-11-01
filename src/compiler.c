@@ -1307,7 +1307,7 @@ static void check_actor_fn(const sexpr_t* fun, int64_t line, ctx_t* ctx)
 static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
 {
     if (n < 2)
-        compiler_malformed(ctx, "server", line);
+        compiler_malformed(ctx, "actor", line);
     if (c->locals != NULL) {
         char msg[96];
         snprintf(msg, sizeof(msg), "Actors must be defined at the top level at line %" PRId64, line);
@@ -1694,7 +1694,7 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
             case FN_HASHMAP: compile_hashmap(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_RECORD: compile_record(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_TUPLE: compile_tuple(c, cons + 1, n - 1, a.line, ctx); return;
-            case FN_SERVER: compile_actor(c, cons + 1, n - 1, a.line, ctx); return;
+            case FN_ACTOR: compile_actor(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_FUN: compile_fun(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_LENGTH: compile_length(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_RECORD_GET_OR_NIL: compile_record_get_or_nil(c, cons + 1, n - 1, a.line, ctx); return;

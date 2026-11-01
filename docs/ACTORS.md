@@ -1,7 +1,7 @@
 ```elixir
 import actor("actor")
 
-server Stack(init) do
+actor Stack(init) do
     # helper to pop data into the stack, namespaced by `Stack`
     fun pop(stack)
         actor::call(stack, :pop)

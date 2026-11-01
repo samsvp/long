@@ -713,11 +713,26 @@ static sexpr_t parse_actor(scanner_t* s, ctx_t* ctx, token_t actor_token, const 
     return cons_sexpr(list);
 }
 
+static sexpr_t keyword_as_id(token_t token)
+{
+    return atom_sexpr((token_t){
+        .kind = TOKEN_LITERAL,
+        .line = token.line,
+        .literal = { .kind = LITERAL_IDENTIFIER, .literal = sv_str_init(special_fn_text(token.fn)) },
+    });
+}
+
 static sexpr_t parse_import(scanner_t* s, ctx_t* ctx, token_t import_token, const sv_allocator_t* a)
 {
     sv_vec_t(sexpr_t) list = sv_vec_init_capacity(sexpr_t, 3, a);
     list.arr[list.size++] = atom_sexpr(import_token);
-    list.arr[list.size++] = atom_sexpr(parser_expect_id(s, ctx, a));
+    token_t name = parser_peek(s, ctx);
+    if (name.kind == TOKEN_SP_FUNCTION) {
+        parser_next(s, ctx);
+        list.arr[list.size++] = keyword_as_id(name);
+    } else {
+        list.arr[list.size++] = atom_sexpr(parser_expect_id(s, ctx, a));
+    }
     parser_expect(s, ctx, op_pattern(OPERATOR_LEFT_PAREN), a);
     list.arr[list.size++] = atom_sexpr(parser_expect_str(s, ctx, a));
     parser_expect(s, ctx, kind_pattern(TOKEN_RIGHT_PAREN), a);
@@ -1030,11 +1045,7 @@ static sexpr_t parse_member(scanner_t* s, ctx_t* ctx, const sv_allocator_t* a)
     if (token.kind != TOKEN_SP_FUNCTION)
         return parse_expr(s, ctx, infix_prec(OPERATOR_DOUBLE_COLON).right, a);
     scanner_next(s, ctx);
-    return atom_sexpr((token_t){
-        .kind = TOKEN_LITERAL,
-        .line = token.line,
-        .literal = { .kind = LITERAL_IDENTIFIER, .literal = sv_str_init(special_fn_text(token.fn)) },
-    });
+    return keyword_as_id(token);
 }
 
 static sexpr_t parse_infix(scanner_t* s, ctx_t* ctx, sexpr_t lhs, uint8_t min_prec,
@@ -1099,7 +1110,7 @@ static sexpr_t parse_form(scanner_t* s, ctx_t* ctx, token_t token, const sv_allo
             return parse_loop(s, ctx, token, a);
         case FN_MAPF:
             return parse_loop(s, ctx, token, a);
-        case FN_SERVER:
+        case FN_ACTOR:
             return parse_actor(s, ctx, token, a);
         case FN_FUN:
             return parse_fun(s, ctx, token, a);
@@ -1145,6 +1156,9 @@ static sexpr_t parse_expr(scanner_t* s, ctx_t* ctx, uint8_t min_prec, const sv_a
         token_pattern ends[] = { kw_pattern(KEYWORD_END) };
         token_t term;
         lhs = parse_block(s, ctx, ends, 1, token.line, &term, a);
+    } else if (token.kind == TOKEN_SP_FUNCTION
+               && token_is(scanner_peek(s, ctx), op_pattern(OPERATOR_DOUBLE_COLON))) {
+        lhs = keyword_as_id(token);
     } else if (token.kind == TOKEN_SP_FUNCTION) {
         lhs = parse_form(s, ctx, token, a);
     } else {
