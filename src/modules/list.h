@@ -107,5 +107,9 @@ value_t ntvl_count(const value_t*, uint8_t, vm_t*);
  * count_by(lst, f): maps f to each element of lst and counts the amount of times f(x) is truthy.
  */
 value_t ntvl_count_by(const value_t*, uint8_t, vm_t*);
+/**
+ * join(lst, joiner): joins the strings of `lst` into one string, with `joiner` between each pair.
+ */
+value_t ntvl_join(const value_t*, uint8_t, vm_t*);
 
 #endif

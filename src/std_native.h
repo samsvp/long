@@ -29,6 +29,10 @@ value_t ntv_printf(const value_t*, uint8_t, vm_t*);
  */
 value_t ntv_printlnf(const value_t*, uint8_t, vm_t*);
 /**
+ * sprintf(str, list) Returns the string formatted like printf.
+ */
+value_t ntv_sprintf(const value_t*, uint8_t, vm_t*);
+/**
  * Prints one value to stdout and adds a new line.
  */
 value_t ntv_println(const value_t*, uint8_t, vm_t*);

@@ -1823,6 +1823,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 1, .name = "println", .fn = ntv_println },
         { .arity = 2, .name = "printf", .fn = ntv_printf },
         { .arity = 2, .name = "printlnf", .fn = ntv_printlnf },
+        { .arity = 2, .name = "sprintf", .fn = ntv_sprintf },
         { .arity = 2, .name = "randi", .fn = ntv_randi },
         { .arity = 2, .name = "randf", .fn = ntv_randf },
     };
@@ -1882,6 +1883,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 2, .name = "take", .fn = ntvl_take },
         { .arity = 2, .name = "skip", .fn = ntvl_skip },
         { .arity = 2, .name = "combinations", .fn = ntvl_combinations },
+        { .arity = 2, .name = "join", .fn = ntvl_join },
     };
     native_fn_t actor_fns[] = {
         { .arity = 2, .name = "get", .fn = ntva_get },

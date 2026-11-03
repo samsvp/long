@@ -58,83 +58,98 @@ value_t ntv_println(const value_t* values, uint8_t n, vm_t* vm)
     return ret;
 }
 
+/**
+ * (format fmt args): writes fmt to b, with each %v replaced by the next value of args and
+ * %% by %. Returns nil, or the error.
+ */
+static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
+{
+    if (!IS_STR(args[0]))
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_STR, &vm->ctx);
+    if (!IS_TUPLE(args[1]) && !IS_LIST(args[1]))
+        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_TUPLE, &vm->ctx);
+
+    const sv_allocator_t* a = vm->ctx.alloc;
+    iterable_t iter = iter_init(args[1], a);
+    if (iter.self == NULL)
+        return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, a, "OOM"), a);
+
+    sv_str_t fmt = AS_STR(args[0]);
+    value_t ret = value_nil;
+    int64_t start_i = 0;
+    int64_t i = 0;
+    while (i < fmt.size) {
+        if (fmt.chars[i++] != '%')
+            continue;
+        // the text before the %
+        if (sv_strb_add(b, fmt.chars + start_i, i - 1 - start_i, a) < 0)
+            goto oom;
+
+        if (i == fmt.size) {
+            const char* err_msg = "Percent simbol '%%' without value descriptor. Use a double '%%%%' if you want to print '%%'";
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a, err_msg), a);
+            goto done;
+        }
+
+        char c = fmt.chars[i++];
+        start_i = i;
+        if (c == '%') {
+            if (sv_strb_add_char(b, '%', a) < 0)
+                goto oom;
+            continue;
+        }
+        if (c != 'v') {
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
+                                           "Unknown value descriptor '%c'", c), a);
+            goto done;
+        }
+
+        sv_opt_t(value_t) v = iterable_next(&iter, a);
+        if (!v.is_some) {
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
+                                           "No value left to print"), a);
+            goto done;
+        }
+        bool ok = value_write(v.value, b, &vm->ctx);
+        value_free(&v.value, a);
+        if (!ok)
+            goto oom;
+    }
+    if (sv_strb_add(b, fmt.chars + start_i, fmt.size - start_i, a) >= 0)
+        goto done;
+
+oom:
+    ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, a, "OOM"), a);
+done:
+    iter_deinit(&iter, a);
+    return ret;
+}
+
 value_t ntv_printf(const value_t* values, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
 
-    if (!IS_STR(values[0]))
-        return bad_arg_type_error(values[0], VALUE_OBJ, OBJ_STR, &vm->ctx);
+    sv_str_builder b = sv_strb_init();
+    value_t ret = format(values, &b, vm);
+    if (!IS_ERR(ret) && b.size > 0)
+        printf("%.*s", (int)b.size, b.arr);
+    sv_strb_deinit(&b, vm->ctx.alloc);
+    return ret;
+}
 
-    if (!IS_TUPLE(values[1]) && !IS_LIST(values[1]))
-        return bad_arg_type_error(values[1], VALUE_OBJ, OBJ_TUPLE, &vm->ctx);
+value_t ntv_sprintf(const value_t* values, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
 
-    iterable_t iter = iter_init(values[1], vm->ctx.alloc);
-    if (iter.self == NULL)
+    sv_str_builder b = sv_strb_init();
+    value_t ret = format(values, &b, vm);
+    if (IS_ERR(ret)) {
+        sv_strb_deinit(&b, vm->ctx.alloc);
+        return ret;
+    }
+    ret = value_init_str_own(sv_strb_to_str(&b), vm->ctx.alloc);
+    if (ret.obj.cell == NULL)
         return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
-    sv_str_t fmt_string = AS_STR(values[0]);
-
-    value_t ret = value_nil;
-    bool failed = false;
-    int64_t start_i = 0;
-    int64_t i = 0;
-    while (i < fmt_string.size) {
-        char c = fmt_string.chars[i++];
-        if (c != '%')
-            continue;
-
-        // fmt error
-        if (i == fmt_string.size) {
-            const char* err_msg = "Percent simbol '%%' without value descriptor. Use a double '%%%%' if you want to print '%%'";
-            ret = value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc, err_msg),
-                vm->ctx.alloc);
-            failed = true;
-            break;
-        }
-
-        c = fmt_string.chars[i++];
-        if (c != '%' && c != 'v') {
-            const char* err_msg = "Unknown value descriptor '%c'";
-            ret = value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc, err_msg, c),
-                vm->ctx.alloc);
-            failed = true;
-            break;
-        }
-
-        printf("%.*s", (int)(i - start_i - 2), fmt_string.chars + start_i);
-        if (c == 'v') {
-            sv_opt_t(value_t) print_value = iterable_next(&iter, vm->ctx.alloc);
-            if (!print_value.is_some) {
-                const char* err_msg = "No value left to print";
-                ret = value_init_err(
-                    error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc, err_msg),
-                    vm->ctx.alloc);
-                failed = true;
-                break;
-            }
-            sv_str_t s = value_to_str(print_value.value, &vm->ctx);
-            value_free(&print_value.value, vm->ctx.alloc);
-            if (s.chars == NULL) {
-                ret = value_init_err(
-                    error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"),
-                    vm->ctx.alloc);
-                failed = true;
-                break;
-            }
-            printf("%.*s", (int)s.size, s.chars);
-            sv_str_deinit(&s, vm->ctx.alloc);
-        }
-        else {
-            printf("%%");
-        }
-
-        start_i = i;
-    }
-    if (!failed && start_i != i) {
-        printf("%.*s", (int)(i - start_i), fmt_string.chars + start_i);
-    }
-    iter_deinit(&iter, vm->ctx.alloc);
     return ret;
 }
 

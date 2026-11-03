@@ -663,3 +663,37 @@ value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)
     iter_deinit(&iter, a);
     return value_from_list(vec, vm);
 }
+
+value_t ntvl_join(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    CHECK_LIST(args[0]);
+    if (!IS_STR(args[1]))
+        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_STR, &vm->ctx);
+
+    const sv_allocator_t* a = vm->ctx.alloc;
+    sv_str_t joiner = AS_STR(args[1]);
+    sv_str_builder b = sv_strb_init();
+
+    ll_iter_t iter = ll_iter_init_no_borrow(AS_LIST(args[0]));
+    sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
+    bool first = true;
+    while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
+        if (!IS_STR(maybe_x.value)) {
+            sv_strb_deinit(&b, a);
+            return bad_arg_type_error(maybe_x.value, VALUE_OBJ, OBJ_STR, &vm->ctx);
+        }
+        sv_str_t s = AS_STR(maybe_x.value);
+        if ((!first && sv_strb_add(&b, joiner.chars, joiner.size, a) < 0)
+            || sv_strb_add(&b, s.chars, s.size, a) < 0) {
+            sv_strb_deinit(&b, a);
+            return oom_error(&vm->ctx);
+        }
+        first = false;
+    }
+
+    value_t ret = value_init_str_own(sv_strb_to_str(&b), a);
+    CHECK_OOM(ret.obj.cell);
+    return ret;
+}
