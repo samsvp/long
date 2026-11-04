@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -161,6 +162,35 @@ value_t ntv_printlnf(const value_t* values, uint8_t n, vm_t* vm)
     return ret;
 }
 
+value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    if (!IS_STR(values[0]))
+        return bad_arg_type_error(values[0], VALUE_OBJ, OBJ_STR, &vm->ctx);
+
+    printf("%.*s\n", (int)AS_STR(values[0]).size, AS_STR(values[0]).chars);
+
+    sv_str_builder b = sv_strb_init();
+    value_t ret = value_nil;
+    char c;
+    while (c = getchar(), c != '\n' && c != EOF) {
+        if (sv_strb_add_char(&b, c, vm->ctx.alloc) == -1) {
+            ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+            goto ret;
+        }
+    }
+
+    sv_str_t str = sv_strb_to_str(&b);
+    ret = value_init_str(str, vm->ctx.alloc);
+    if (ret.obj.cell == NULL)
+        value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+
+ret:
+    sv_strb_deinit(&b, vm->ctx.alloc);
+    return ret;
+}
+
 value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 1);
@@ -231,7 +261,17 @@ value_t ntv_int(const value_t* args, uint8_t n, vm_t* vm)
         return (value_t){ .kind = VALUE_NUMBER, .number = floor(AS_NUMBER(x)) };
     if (IS_ATOM(x))
         return (value_t){ .kind = VALUE_NUMBER, .number = x.number };
-    return bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, &vm->ctx);
+    if (IS_STR(x)) {
+        sv_str_t s = AS_STR(x);
+        const char* c = sv_str_to_c_str(s, vm->ctx.alloc);
+        char* end = "";
+        long int d = strtol(c, &end, 10);
+        if (c == end || end[0] != '\0') {
+            return value_nil;
+        }
+        return (value_t){ .kind = VALUE_NUMBER, .number = (double)d };
+    }
+    return value_nil;
 }
 
 #undef RAND

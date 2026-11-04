@@ -33,6 +33,10 @@ value_t ntv_printlnf(const value_t*, uint8_t, vm_t*);
  */
 value_t ntv_sprintf(const value_t*, uint8_t, vm_t*);
 /**
+ * input(message) Get's user input
+ */
+value_t ntv_input(const value_t*, uint8_t, vm_t*);
+/**
  * Prints one value to stdout and adds a new line.
  */
 value_t ntv_println(const value_t*, uint8_t, vm_t*);
