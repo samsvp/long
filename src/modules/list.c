@@ -618,6 +618,22 @@ value_t ntvl_count(const value_t* args, uint8_t n, vm_t* vm)
     return (value_t){.kind = VALUE_NUMBER, .number = count};
 }
 
+value_t ntvl_contains(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    iterable_t iter = iter_init(args[0], vm->ctx.alloc);
+    if (iter.self == NULL)
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+
+    sv_opt_t(value_t) next = sv_opt_none_t(value_t);
+    while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some)
+        if (value_eql(next.value, args[1]))
+            return value_true;
+
+    return value_false;
+}
+
 value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);

@@ -108,6 +108,10 @@ value_t ntvl_count(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_count_by(const value_t*, uint8_t, vm_t*);
 /**
+ * contains(list, val): true if list contains val, false otherwise
+ */
+value_t ntvl_contains(const value_t*, uint8_t, vm_t*);
+/**
  * join(lst, joiner): joins the strings of `lst` into one string, with `joiner` between each pair.
  */
 value_t ntvl_join(const value_t*, uint8_t, vm_t*);
