@@ -17,16 +17,21 @@ static int64_t utf8_len(char lead)
     return 1;
 }
 
+str_iter_t str_iter_init_no_borrow(sv_str_t* s)
+{
+    return (str_iter_t){ .root = {0}, .str = s, .i = 0 };
+}
+
 str_iter_t str_iter_init(sv_str_t* s)
 {
-    sv_rc_borrow(str_obj(s));
-    return (str_iter_t){ .str = s, .i = 0 };
+    str_iter_t it = str_iter_init_no_borrow(s);
+    it.root = sv_rc_borrow(str_obj(s));
+    return it;
 }
 
 void str_iter_deinit(str_iter_t* it, const sv_allocator_t* a)
 {
-    sv_rc_t(obj_t) obj = str_obj(it->str);
-    sv_rc_deinit(&obj, a);
+    sv_rc_deinit(&it->root, a);
 }
 
 value_t str_iter_next(str_iter_t* it, const sv_allocator_t* a)

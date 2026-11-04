@@ -8,6 +8,7 @@
 #include "iterable.h"
 
 typedef struct {
+    sv_rc_t(obj_t) root;
     sv_str_t* str;
     int64_t i;
 } str_iter_t;
@@ -20,7 +21,12 @@ typedef struct {
  */
 str_iter_t str_iter_init(sv_str_t*);
 /**
- * Deinitializes the iterator, releasing the string obj.
+ * Initializes an iterator viewing the string without borrowing it. The string
+ * must outlive the iterator; no deinit is needed.
+ */
+str_iter_t str_iter_init_no_borrow(sv_str_t*);
+/**
+ * Deinitializes the iterator, releasing the string obj if it was borrowed.
  */
 void str_iter_deinit(str_iter_t*, const sv_allocator_t*);
 /**

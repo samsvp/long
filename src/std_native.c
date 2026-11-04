@@ -71,9 +71,8 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
         return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_TUPLE, &vm->ctx);
 
     const sv_allocator_t* a = vm->ctx.alloc;
-    iterable_t iter = iter_init(args[1], a);
-    if (iter.self == NULL)
-        return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, a, "OOM"), a);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(args[1], &storage);
 
     sv_str_t fmt = AS_STR(args[0]);
     value_t ret = value_nil;
@@ -122,7 +121,6 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
 oom:
     ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, a, "OOM"), a);
 done:
-    iter_deinit(&iter, a);
     return ret;
 }
 

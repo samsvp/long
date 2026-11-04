@@ -42,9 +42,16 @@ sv_opt_t(value_t) tuple_get(tuple_t tuple, int64_t i)
     return sv_opt_some_t(value_t, tuple.items[i]);
 }
 
+tuple_iter_t tuple_iter_init_no_borrow(value_t v)
+{
+    return (tuple_iter_t){ .root = {0}, .tuple = v.obj.cell->value.tuple, .i = 0 };
+}
+
 tuple_iter_t tuple_iter_init(value_t v)
 {
-    return (tuple_iter_t){ .root = sv_rc_borrow(v.obj) };
+    tuple_iter_t it = tuple_iter_init_no_borrow(v);
+    it.root = sv_rc_borrow(v.obj);
+    return it;
 }
 
 void tuple_iter_deinit(tuple_iter_t* it, const sv_allocator_t* a)
@@ -55,14 +62,14 @@ void tuple_iter_deinit(tuple_iter_t* it, const sv_allocator_t* a)
 static int64_t iterable_tuple_len(const void* self)
 {
     const tuple_iter_t* it = self;
-    return it->root.cell->value.tuple.size - it->i;
+    return it->tuple.size - it->i;
 }
 
 static sv_opt_t(value_t) iterable_tuple_next(void* self, const sv_allocator_t* a)
 {
     (void)a;
     tuple_iter_t* it = self;
-    tuple_t t = it->root.cell->value.tuple;
+    tuple_t t = it->tuple;
     return it->i < t.size ? sv_opt_some_t(value_t, value_borrow(t.items[it->i++])) : sv_opt_none_t(value_t);
 }
 

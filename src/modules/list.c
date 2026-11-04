@@ -58,17 +58,16 @@ static value_t map_filter_list(value_t value, value_t fn, bool with_index, bool 
 {
     const sv_allocator_t* a = vm->ctx.alloc;
 
-    iterable_t iter = iter_init(value, a);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(value, &storage);
     if (iter.self == NULL)
         return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
     int64_t count = iterable_len(&iter);
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
-    if (vec.arr == NULL) {
-        iter_deinit(&iter, a);
+    if (vec.arr == NULL)
         return oom_error(&vm->ctx);
-    }
 
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
     double i = 0;
@@ -78,7 +77,6 @@ static value_t map_filter_list(value_t value, value_t fn, bool with_index, bool 
         if (IS_ERR(ret)) {
             value_free(&v.value, a);
             free_back_filled(&vec, a);
-            iter_deinit(&iter, a);
             return ret;
         }
         if (!filter) {
@@ -92,7 +90,6 @@ static value_t map_filter_list(value_t value, value_t fn, bool with_index, bool 
             value_free(&ret, a);
         }
     }
-    iter_deinit(&iter, a);
 
     if (vec.size < count)
         memmove(vec.arr, vec.arr + count - vec.size, vec.size * sizeof(value_t));
@@ -103,7 +100,8 @@ static value_t reduce_list(value_t value, value_t fn, value_t acc, bool with_ind
 {
     const sv_allocator_t* a = vm->ctx.alloc;
 
-    iterable_t iter = iter_init(value, a);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(value, &storage);
     if (iter.self == NULL)
         return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
@@ -119,7 +117,6 @@ static value_t reduce_list(value_t value, value_t fn, value_t acc, bool with_ind
         if (IS_ERR(acc))
             break;
     }
-    iter_deinit(&iter, a);
 
     return acc;
 }
@@ -178,21 +175,19 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
 
     const sv_allocator_t* a = vm->ctx.alloc;
 
-    iterable_t iter1 = iter_init(args[0], a);
+    iter_storage_t storage1;
+    iterable_t iter1 = iter_init_no_borrow(args[0], &storage1);
     if (iter1.self == NULL)
         return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
-    iterable_t iter2 = iter_init(args[1], a);
-    if (iter2.self == NULL) {
-        iter_deinit(&iter1, a);
+    iter_storage_t storage2;
+    iterable_t iter2 = iter_init_no_borrow(args[1], &storage2);
+    if (iter2.self == NULL)
         return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_ITER, &vm->ctx);
-    }
 
     int64_t l1_n = iterable_len(&iter1);
     int64_t l2_n = iterable_len(&iter2);
 
     if (l1_n != l2_n) {
-        iter_deinit(&iter1, a);
-        iter_deinit(&iter2, a);
         return value_init_err(
                 error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
                           "Lists must have the same length, got %ld and %ld",
@@ -214,8 +209,6 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
         if (!oom)
             vec.arr[l1_n - ++vec.size] = tuple;
     }
-    iter_deinit(&iter1, a);
-    iter_deinit(&iter2, a);
 
     if (oom) {
         free_back_filled(&vec, a);
@@ -606,14 +599,17 @@ value_t ntvl_count(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
 
-    iterable_t iter = iter_init(args[0], vm->ctx.alloc);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
         return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
     double count = 0;
     sv_opt_t(value_t) next = sv_opt_none_t(value_t);
-    while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some)
+    while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some) {
         count += value_eql(next.value, args[1]);
+        value_free(&next.value, vm->ctx.alloc);
+    }
 
     return (value_t){.kind = VALUE_NUMBER, .number = count};
 }
@@ -622,23 +618,27 @@ value_t ntvl_contains(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
 
-    iterable_t iter = iter_init(args[0], vm->ctx.alloc);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
         return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
+    bool found = false;
     sv_opt_t(value_t) next = sv_opt_none_t(value_t);
-    while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some)
-        if (value_eql(next.value, args[1]))
-            return value_true;
+    while (!found && (next = iterable_next(&iter, vm->ctx.alloc), next.is_some)) {
+        found = value_eql(next.value, args[1]);
+        value_free(&next.value, vm->ctx.alloc);
+    }
 
-    return value_false;
+    return found ? value_true : value_false;
 }
 
 value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
 
-    iterable_t iter = iter_init(args[0], vm->ctx.alloc);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
         return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
@@ -646,6 +646,7 @@ value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
     sv_opt_t(value_t) next = sv_opt_none_t(value_t);
     while (next = iterable_next(&iter, vm->ctx.alloc), next.is_some) {
         value_t ret = vm_call_value(vm, args[1], &next.value, 1);
+        value_free(&next.value, vm->ctx.alloc);
         UNWRAP_ERR(ret);
         count += !IS_FALSEY(ret);
         value_free(&ret, vm->ctx.alloc);
@@ -660,23 +661,22 @@ value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)
 
     const sv_allocator_t* a = vm->ctx.alloc;
 
-    iterable_t iter = iter_init(args[0], a);
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
         return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
     int64_t count = iterable_len(&iter);
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
-    if (vec.arr == NULL) {
-        iter_deinit(&iter, a);
+    if (vec.arr == NULL)
         return oom_error(&vm->ctx);
-    }
 
+    // iterable_next hands over an owned value, so the list takes it as is
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
     while (v = iterable_next(&iter, a), v.is_some)
-        vec.arr[vec.size++] = value_borrow(v.value);
+        vec.arr[vec.size++] = v.value;
 
-    iter_deinit(&iter, a);
     return value_from_list(vec, vm);
 }
 

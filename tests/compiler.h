@@ -489,6 +489,35 @@ static inline void sv_test_compiler_native_calls(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_apply("\napply(1, 2)", "Line 2: Type is not callable"));
 }
 
+/* List module natives that walk an iterable. These run under LeakSanitizer, so an
+ * iterator or element they fail to release fails the suite. */
+static inline void sv_test_compiler_list_iteration(sv_testing_t* t)
+{
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count([1, 2, 1, 3], 1)", 2));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count([], 1)", 0));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count([[1], [1], [2]], [1])", 2));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count(\"abca\", \"a\")", 2));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count((1, 1, 2), 1)", 2));
+   sv_test_run(t, sv_test_compiler_runtime_err("import list(\"list\")\nlist::count(5, 1)") == VM_ERR_WRONG_TYPE);
+
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::contains([1, 2, 3], 2) do 1 else 0 end", 1));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::contains([1, 2, 3], 4) do 1 else 0 end", 0));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::contains([[1], [2]], [2]) do 1 else 0 end", 1));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::contains(\"héllo\", \"é\") do 1 else 0 end", 1));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::contains((1, 2), 2) do 1 else 0 end", 1));
+   sv_test_run(t, sv_test_compiler_runtime_err("import list(\"list\")\nlist::contains(5, 1)") == VM_ERR_WRONG_TYPE);
+
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count_by([1, 2, 3, 4], fun (x) x > 2)", 2));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count_by([[1], [2, 3]], fun (x) len(x) > 1)", 1));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::count_by(\"abc\", fun (c) c == \"b\")", 1));
+   sv_test_run(t, sv_test_compiler_runtime_err(
+      "import list(\"list\")\nlist::count_by([[1], [2]], fun (x) x - nil)") == VM_ERR_OP_UNSUPPORTED_ARGS);
+
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::rev([1, 2, 3])[0]", 3));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::rev([[1], [2]])[0][0]", 2));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::rev(\"ab\")[0] == \"b\" do 1 else 0 end", 1));
+}
+
 static inline void sv_test_compiler_for(sv_testing_t* t)
 {
    sv_test_run(t, sv_test_compiler_num(
@@ -1448,6 +1477,7 @@ static inline void sv_test_compiler(sv_testing_t* t)
    sv_test_compiler_errors(t);
    sv_test_compiler_runtime_errors(t);
    sv_test_compiler_native_calls(t);
+   sv_test_compiler_list_iteration(t);
    sv_test_compiler_error_messages(t);
    sv_test_compiler_oom(t);
    sv_test_compiler_imports(t);
