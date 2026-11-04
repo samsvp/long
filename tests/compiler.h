@@ -516,6 +516,16 @@ static inline void sv_test_compiler_list_iteration(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::rev([1, 2, 3])[0]", 3));
    sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::rev([[1], [2]])[0][0]", 2));
    sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nif list::rev(\"ab\")[0] == \"b\" do 1 else 0 end", 1));
+
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlen(list::combinations([1, 2, 3, 4], 2))", 6));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlen(list::combinations([1, 2, 3], 3))", 1));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlen(list::combinations([1, 2, 3], 0))", 1));
+   /* Fewer elements than k: the whole list is the only combination. */
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlen(list::combinations([1, 2, 3], 5))", 1));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlen(list::combinations([1, 2, 3], 5)[0])", 3));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlist::combinations([[7], [8]], 5)[0][1][0]", 8));
+   sv_test_run(t, sv_test_compiler_num("import list(\"list\")\nlen(list::combinations([], 1))", 1));
+   sv_test_run(t, sv_test_compiler_runtime_err("import list(\"list\")\nlist::combinations([1], 1.5)") == VM_ERR_WRONG_TYPE);
 }
 
 static inline void sv_test_compiler_for(sv_testing_t* t)
