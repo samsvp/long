@@ -50,16 +50,6 @@ void actor_free(actor_t* actor, const sv_allocator_t* a)
     value_free(&actor->state, a);
 }
 
-value_t actor_get(value_t actor_val, value_t arg, vm_t* vm)
-{
-    actor_t actor = AS_ACTOR(actor_val);
-    if (IS_NIL(actor.vtable->get_fn))
-        return function_not_defined("get", &actor, vm);
-
-    value_t args[2] = { actor.state, arg };
-    return vm_call_value(vm, actor.vtable->get_fn, args, 2);
-}
-
 static value_t call_busy(actor_t* actor, value_t arg, value_t function,
                          const char* fun_name, vm_t* vm)
 {
@@ -74,6 +64,12 @@ static value_t call_busy(actor_t* actor, value_t arg, value_t function,
     actor->busy = false;
 
     return new_state;
+}
+
+value_t actor_get(value_t actor_val, value_t arg, vm_t* vm)
+{
+    actor_t* actor = &AS_ACTOR(actor_val);
+    return call_busy(actor, arg, actor->vtable->get_fn, "get", vm);
 }
 
 value_t actor_update(value_t actor_val, value_t arg, vm_t* vm)
