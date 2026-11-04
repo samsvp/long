@@ -100,8 +100,8 @@ value_t actor_call(value_t actor_val, value_t arg, vm_t* vm)
     tuple_t tuple = AS_TUPLE(new_state);
 
     value_free(&actor->state, vm->ctx.alloc);
-    actor->state = value_borrow(tuple.items[1]);
-    value_t ret = value_borrow(tuple.items[0]);
+    actor->state = value_borrow(tuple.items[0]);
+    value_t ret = value_borrow(tuple.items[1]);
     value_free(&new_state, vm->ctx.alloc);
     return ret;
 }
