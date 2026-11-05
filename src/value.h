@@ -168,11 +168,47 @@ sv_opt_def(value_t);
  * Frees every value in the vector and the vector itself.
  */
 void value_arr_deinit(sv_vec_t(value_t)*, const sv_allocator_t*);
+bool value_obj_eql(value_t, value_t);
+
+#if LONG_NAN_BOXING
 /**
  * Only nil, false and undefined are falsy.
  */
-bool value_is_truthy(value_t);
-bool value_eql(value_t, value_t);
+static inline bool value_is_truthy(value_t v)
+{
+    return v.bits != VALUE_NIL_BITS && v.bits != VALUE_FALSE_BITS && v.bits != VALUE_UNDEFINED_BITS;
+}
+
+static inline bool value_eql(value_t x, value_t y)
+{
+    if (IS_NUMBER(x) && IS_NUMBER(y))
+        return AS_NUMBER(x) == AS_NUMBER(y);
+    if (IS_OBJ(x) && IS_OBJ(y))
+        return value_obj_eql(x, y);
+    return x.bits == y.bits && x.bits != VALUE_UNDEFINED_BITS;
+}
+#else
+static inline bool value_is_truthy(value_t v)
+{
+    return v.kind != VALUE_NIL && v.kind != VALUE_UNDEFINED && (v.kind != VALUE_BOOL || v.boolean);
+}
+
+static inline bool value_eql(value_t x, value_t y)
+{
+    if (x.kind != y.kind)
+        return false;
+    switch (x.kind) {
+        case VALUE_NUMBER: return x.number == y.number;
+        case VALUE_ATOM: return x.number == y.number;
+        case VALUE_UNDEFINED: return false;
+        case VALUE_NIL: return true;
+        case VALUE_C: return x.c == y.c;
+        case VALUE_BOOL: return x.boolean == y.boolean;
+        case VALUE_OBJ: return value_obj_eql(x, y);
+    }
+    return false;
+}
+#endif
 
 /**
  * Converts the value a string representation.

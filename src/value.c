@@ -19,20 +19,6 @@ void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
     sv_vec_deinit(arr, a);
 }
 
-bool value_is_truthy(value_t v)
-{
-    switch (VALUE_KIND(v)) {
-        case VALUE_UNDEFINED:
-        case VALUE_NIL: return false;
-        case VALUE_BOOL: return AS_BOOL(v);
-        case VALUE_C:
-        case VALUE_NUMBER:
-        case VALUE_ATOM:
-        case VALUE_OBJ: return true;
-    }
-    return true;
-}
-
 static bool list_eql(list_t x, list_t y)
 {
     if (ll_count(x) != ll_count(y))
@@ -62,41 +48,28 @@ static bool map_eql(hashmap_t x, hashmap_t y)
     return true;
 }
 
-bool value_eql(value_t x, value_t y)
+bool value_obj_eql(value_t x, value_t y)
 {
-    if (VALUE_KIND(x) != VALUE_KIND(y))
+    if (AS_OBJ(x).cell == AS_OBJ(y).cell)
+        return true;
+    const obj_t* ox = &AS_OBJ(x).cell->value;
+    const obj_t* oy = &AS_OBJ(y).cell->value;
+    if (ox->kind != oy->kind)
         return false;
-    switch (VALUE_KIND(x)) {
-        case VALUE_NUMBER: return AS_NUMBER(x) == AS_NUMBER(y);
-        case VALUE_ATOM: return AS_ATOM(x) == AS_ATOM(y);
-        case VALUE_UNDEFINED: return false;
-        case VALUE_NIL: return true;
-        case VALUE_C: return AS_C(x) == AS_C(y);
-        case VALUE_BOOL: return AS_BOOL(x) == AS_BOOL(y);
-        case VALUE_OBJ: {
-            if (AS_OBJ(x).cell == AS_OBJ(y).cell)
-                return true;
-            const obj_t* ox = &AS_OBJ(x).cell->value;
-            const obj_t* oy = &AS_OBJ(y).cell->value;
-            if (ox->kind != oy->kind)
-                return false;
-            switch (ox->kind) {
-                case OBJ_STR: return sv_str_comp(ox->str, oy->str);
-                case OBJ_LIST: return list_eql(ox->list, oy->list);
-                case OBJ_MAP: return map_eql(ox->map, oy->map);
-                case OBJ_RECORD: return record_eql(ox->record, oy->record);
-                case OBJ_TUPLE: return tuple_eql(ox->tuple, oy->tuple);
-                case OBJ_USER_VALUE: return uv_eql(ox->uservalue, oy->uservalue);
-                case OBJ_NATIVE_FN:
-                case OBJ_ITER:
-                case OBJ_CLOSURE:
-                case OBJ_CLOSURE_MEMBER:
-                case OBJ_ACTOR:
-                case OBJ_ERR: // maybe errors should have structural equality
-                    return ox == oy;
-            }
-            return false;
-        }
+    switch (ox->kind) {
+        case OBJ_STR: return sv_str_comp(ox->str, oy->str);
+        case OBJ_LIST: return list_eql(ox->list, oy->list);
+        case OBJ_MAP: return map_eql(ox->map, oy->map);
+        case OBJ_RECORD: return record_eql(ox->record, oy->record);
+        case OBJ_TUPLE: return tuple_eql(ox->tuple, oy->tuple);
+        case OBJ_USER_VALUE: return uv_eql(ox->uservalue, oy->uservalue);
+        case OBJ_NATIVE_FN:
+        case OBJ_ITER:
+        case OBJ_CLOSURE:
+        case OBJ_CLOSURE_MEMBER:
+        case OBJ_ACTOR:
+        case OBJ_ERR: // maybe errors should have structural equality
+            return ox == oy;
     }
     return false;
 }
