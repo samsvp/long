@@ -459,9 +459,7 @@ static void bind_tuple(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen,
                        int64_t line, ctx_t* ctx)
 {
     int64_t arity = pattern.cons.size - 1;
-    emit(c, ctx, OP_DUP, line);
-    emit_narrow(c, ctx, OP_IS_TUPLE, arity, "tuple elements", line);
-    emit_assert(c, line, ctx);
+    emit_narrow(c, ctx, OP_MATCH_TUPLE, arity, "tuple elements", line);
 
     for (int64_t i = 0; i < arity; i++) {
         emit2(c, ctx, OP_TUPLE_GET_MATCH, (uint8_t)i, line);
@@ -476,12 +474,10 @@ static void bind_record(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen
         reject_shape(ctx, "A record or hashmap pattern cannot bind its rest, use a bare '..'", line);
 
     int64_t n = record_n_fields(pattern);
-    emit(c, ctx, OP_DUP, line);
     if (record_is_open(pattern))
-        emit(c, ctx, OP_IS_RECORD_ANY, line);
+        emit(c, ctx, OP_MATCH_RECORD_ANY, line);
     else
-        emit_narrow(c, ctx, OP_IS_RECORD, n, "record fields", line);
-    emit_assert(c, line, ctx);
+        emit_narrow(c, ctx, OP_MATCH_RECORD, n, "record fields", line);
 
     for (int64_t i = 0; i < n; i++) {
         sv_str_t field = expect_id(pattern.cons.arr[1 + 2 * i], ctx);
@@ -499,15 +495,10 @@ static void bind_hashmap(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* see
         reject_shape(ctx, "A record or hashmap pattern cannot bind its rest, use a bare '..'", line);
 
     int64_t n = hashmap_n_keys(pattern);
-    emit(c, ctx, OP_DUP, line);
-    if (hashmap_is_open(pattern)) {
-        emit(c, ctx, OP_IS_HASHMAP_ANY, line);
-    } else {
-        add_const(c, ctx, (value_t){ .kind = VALUE_NUMBER, .number = (double)n }, line);
-        emit(c, ctx, OP_SWAP, line);
-        emit(c, ctx, OP_IS_HASHMAP, line);
-    }
-    emit_assert(c, line, ctx);
+    if (hashmap_is_open(pattern))
+        emit(c, ctx, OP_MATCH_HASHMAP_ANY, line);
+    else
+        emit_wide(c, ctx, OP_MATCH_HASHMAP, (uint32_t)n, line);
 
     for (int64_t i = 0; i < n; i++) {
         compile_sexpr(c, pattern.cons.arr[1 + 2 * i], false, ctx);
@@ -525,9 +516,7 @@ static void bind_list(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen,
                       int64_t line, ctx_t* ctx)
 {
     int64_t fixed = list_n_fixed(pattern);
-    emit(c, ctx, OP_DUP, line);
-    emit(c, ctx, OP_IS_LIST, line);
-    emit_assert(c, line, ctx);
+    emit(c, ctx, OP_MATCH_LIST, line);
 
     for (int64_t i = 0; i < fixed; i++) {
         emit(c, ctx, OP_LIST_UNCONS_MATCH, line);
@@ -540,10 +529,7 @@ static void bind_list(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen,
             reject_shape(ctx, "List tail must be a variable or a list", line);
         bind_pattern(c, tail, seen, line, ctx);
     } else {
-        emit(c, ctx, OP_DUP, line);
-        emit(c, ctx, OP_IS_CONS, line);
-        emit(c, ctx, OP_NOT, line);
-        emit_assert(c, line, ctx);
+        emit(c, ctx, OP_MATCH_EMPTY_LIST, line);
     }
 
     for (int64_t i = 0; i < fixed; i++)

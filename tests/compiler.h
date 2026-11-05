@@ -1280,6 +1280,11 @@ static inline void sv_test_compiler_destructure(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v, ..} = %{\"b\": 1}") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_msg("%{\"a\": v, ..} = %{\"b\": 1}",
       "Line 1: Value does not match the pattern: %{b: 1}"));
+   sv_test_run(t, sv_test_compiler_runtime_err("[a] = 5") == VM_ERR_MATCH_FAILED);
+   sv_test_run(t, sv_test_compiler_runtime_msg("[a] = [1, 2]",
+      "Line 1: Value does not match the pattern: [2]"));
+   sv_test_run(t, sv_test_compiler_runtime_err("{x} = {x: 1, y: 2}") == VM_ERR_MATCH_FAILED);
+   sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v, ..} = 5") == VM_ERR_MATCH_FAILED);
 
    sv_test_run(t, sv_test_compiler_num("%{\"a\": v, ..} = %{\"a\": 5, \"b\": 6}\nv", 5));
    sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v} = %{\"a\": 5, \"b\": 6}\nv")

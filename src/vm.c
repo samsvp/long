@@ -269,6 +269,26 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
     TRY_PUSH_STACK(res);                                                                                      \
     DISPATCH(); }
 
+#define RAISE_MATCH_FAILED() do {                                                                             \
+    value_t subject = value_borrow(sv_vec_last(stack));                                                       \
+    sv_str_t text = value_to_str(subject, &vm->ctx);                                                          \
+    RAISE(VM_ERR_MATCH_FAILED, value_free(&subject, a); sv_str_deinit(&text, a),                              \
+          "Value does not match the pattern: %.*s", (int)text.size, text.chars);                              \
+} while (0)
+
+#define MATCH_KIND(test) {                                                                                    \
+    value_t v = sv_vec_last(stack);                                                                           \
+    if (!(test))                                                                                              \
+        RAISE_MATCH_FAILED();                                                                                 \
+    DISPATCH(); }
+
+#define MATCH_SIZED(is, as, field) {                                                                          \
+    uint8_t want = READ_BYTE();                                                                               \
+    value_t v = sv_vec_last(stack);                                                                           \
+    if (!(is(v) && as(v).field == want))                                                                      \
+        RAISE_MATCH_FAILED();                                                                                 \
+    DISPATCH(); }
+
 #define NUM_BIN_OP(op, res_kind, res_field) {                                                                 \
     value_t v2 = sv_vec_pop(stack);                                                                           \
     value_t v1 = sv_vec_pop(stack);                                                                           \
@@ -937,6 +957,20 @@ DISPATCH(); }
             TRY_PUSH_STACK(res);
             DISPATCH();
         }
+        CASE(OP_MATCH_LIST): MATCH_KIND(IS_LIST(v))
+        CASE(OP_MATCH_EMPTY_LIST): MATCH_KIND(!IS_CONS(v))
+        CASE(OP_MATCH_RECORD_ANY): MATCH_KIND(IS_RECORD(v))
+        CASE(OP_MATCH_HASHMAP_ANY): MATCH_KIND(IS_MAP(v))
+        CASE(OP_MATCH_TUPLE): MATCH_SIZED(IS_TUPLE, AS_TUPLE, size)
+        CASE(OP_MATCH_RECORD): MATCH_SIZED(IS_RECORD, AS_RECORD, size)
+        CASE(OP_MATCH_HASHMAP): {
+            uint32_t want = 0;
+            READ_ARG(want);
+            value_t v = sv_vec_last(stack);
+            if (!(IS_MAP(v) && map_count(AS_MAP(v)) == want))
+                RAISE_MATCH_FAILED();
+            DISPATCH();
+        }
         CASE(OP_HAS_FIELD): {
             value_t v = sv_vec_pop(stack);
             uint8_t id = READ_BYTE();
@@ -956,12 +990,6 @@ DISPATCH(); }
             TRY_PUSH_STACK(res);
             DISPATCH();
         }
-#define RAISE_MATCH_FAILED() do {                                                                             \
-    value_t subject = value_borrow(sv_vec_last(stack));                                                       \
-    sv_str_t text = value_to_str(subject, &vm->ctx);                                                          \
-    RAISE(VM_ERR_MATCH_FAILED, value_free(&subject, a); sv_str_deinit(&text, a),                              \
-          "Value does not match the pattern: %.*s", (int)text.size, text.chars);                              \
-} while (0)
 #define LIST_UNCONS(...) do {                                                                                 \
     /* v is a view of the stack top, so nothing here frees it */                                              \
     value_t v = sv_vec_last(stack);                                                                           \
@@ -1019,7 +1047,6 @@ DISPATCH(); }
             TRY_PUSH_STACK(value_borrow(item.value));
             DISPATCH();
         }
-#undef RAISE_MATCH_FAILED
         CASE(OP_NO_MATCH): {
             value_t subject = value_borrow(sv_vec_last(stack));
             sv_str_t text = value_to_str(subject, &vm->ctx);
@@ -1059,6 +1086,9 @@ error:
 #undef CMP_OP
 #undef IS_KIND
 #undef IS_SIZED
+#undef RAISE_MATCH_FAILED
+#undef MATCH_KIND
+#undef MATCH_SIZED
 #undef NUM_BIN_OP
 #undef RAISE
 #undef TYPE_NAME

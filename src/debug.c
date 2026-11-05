@@ -92,6 +92,13 @@ static const char* op_name(vm_instructions op)
         case OP_HAS_KEY: return "has_key";
         case OP_LIST_UNCONS: return "list_uncons";
         case OP_LIST_UNCONS_MATCH: return "list_uncons_match";
+        case OP_MATCH_LIST: return "match_list";
+        case OP_MATCH_EMPTY_LIST: return "match_empty_list";
+        case OP_MATCH_TUPLE: return "match_tuple";
+        case OP_MATCH_RECORD: return "match_record";
+        case OP_MATCH_RECORD_ANY: return "match_record_any";
+        case OP_MATCH_HASHMAP: return "match_hashmap";
+        case OP_MATCH_HASHMAP_ANY: return "match_hashmap_any";
         case OP_ASSERT_MATCH: return "assert_match";
         case OP_NO_MATCH: return "no_match";
         case OP_SWAP: return "swap";
@@ -193,6 +200,9 @@ void print_chunk(chunk_t chunk)
             case OP_RECORD_GET_OR_UNDEF:
             case OP_RECORD_GET_MATCH:
             case OP_TUPLE_GET_MATCH:
+            case OP_MATCH_TUPLE:
+            case OP_MATCH_RECORD:
+            case OP_MATCH_HASHMAP:
             case OP_IS_TUPLE:
             case OP_IS_RECORD:
             case OP_HAS_FIELD:
@@ -250,6 +260,10 @@ void print_chunk(chunk_t chunk)
             case OP_LIST_UNCONS:
             case OP_LIST_UNCONS_MATCH:
             case OP_HASHMAP_GET_MATCH:
+            case OP_MATCH_LIST:
+            case OP_MATCH_EMPTY_LIST:
+            case OP_MATCH_RECORD_ANY:
+            case OP_MATCH_HASHMAP_ANY:
             case OP_ASSERT_MATCH:
             case OP_NO_MATCH:
             case OP_LIST_STACK:
