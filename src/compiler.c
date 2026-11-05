@@ -359,16 +359,18 @@ static void compile_id(compiler_t* c, sv_str_t id, int64_t line, ctx_t* ctx)
         compiler_error_name(ctx, C_ERR_UNDEFINED_VARIABLE, line, "Undefined variable", id);
 }
 
-static void add_var(compiler_t* c, sv_str_t id, int64_t line, ctx_t* ctx)
+static void add_var(compiler_t* c, sv_str_t id, bool keep, int64_t line, ctx_t* ctx)
 {
     if (c->locals != NULL) {
         emit(c, ctx, OP_SET_LOCAL, line);
         uint32_t idx = locals_add(c->locals, id, ctx, line);
-        emit_wide(c, ctx, OP_GET_LOCAL, idx, line);
+        if (keep)
+            emit_wide(c, ctx, OP_GET_LOCAL, idx, line);
     } else {
         emit(c, ctx, OP_SET_GLOBAL, line);
         uint32_t idx = globals_add(&c->globals, id, sv_str_init(c->current_path), line, ctx, c->scratch);
-        emit_wide(c, ctx, OP_GET_GLOBAL, idx, line);
+        if (keep)
+            emit_wide(c, ctx, OP_GET_GLOBAL, idx, line);
     }
 }
 
@@ -417,7 +419,7 @@ static void bind_pattern(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* see
  * A first occurrence declares the name; a repeat compares against what the earlier
  * occurrence bound, so `(a, a) = e` requires both positions to be equal.
  */
-static void bind_var(compiler_t* c, sv_str_t name, sv_vec_t(sv_str_t)* seen,
+static void bind_var(compiler_t* c, sv_str_t name, sv_vec_t(sv_str_t)* seen, bool keep,
                      int64_t line, ctx_t* ctx)
 {
     for (int64_t i = 0; i < seen->size; i++) {
@@ -428,11 +430,13 @@ static void bind_var(compiler_t* c, sv_str_t name, sv_vec_t(sv_str_t)* seen,
         compile_id(c, name, line, ctx);
         emit(c, ctx, OP_EQUALS, line);
         emit_assert(c, line, ctx);
+        if (!keep)
+            emit(c, ctx, OP_POP, line);
         return;
     }
 
     sv_vec_push(seen, name, NULL, c->scratch);
-    add_var(c, name, line, ctx);
+    add_var(c, name, keep, line, ctx);
 }
 
 /**
@@ -443,6 +447,10 @@ static void bind_var(compiler_t* c, sv_str_t name, sv_vec_t(sv_str_t)* seen,
 static void bind_part(compiler_t* c, sexpr_t sub, sv_vec_t(sv_str_t)* seen,
                       int64_t line, ctx_t* ctx)
 {
+    if (pattern_is_name(sub) && !is_pattern_wildcard(sub)) {
+        bind_var(c, sub.atom.literal.literal, seen, false, line, ctx);
+        return;
+    }
     bind_pattern(c, sub, seen, line, ctx);
     emit(c, ctx, OP_POP, line);
 }
@@ -456,9 +464,7 @@ static void bind_tuple(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen,
     emit_assert(c, line, ctx);
 
     for (int64_t i = 0; i < arity; i++) {
-        emit(c, ctx, OP_DUP, line);
-        add_const(c, ctx, (value_t){ .kind = VALUE_NUMBER, .number = (double)i }, line);
-        emit(c, ctx, OP_INDEX, line);
+        emit2(c, ctx, OP_TUPLE_GET_MATCH, (uint8_t)i, line);
         bind_part(c, pattern.cons.arr[1 + i], seen, line, ctx);
     }
 }
@@ -481,12 +487,7 @@ static void bind_record(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen
         sv_str_t field = expect_id(pattern.cons.arr[1 + 2 * i], ctx);
         uint32_t id = record_field_id(c, field, line, ctx);
 
-        emit(c, ctx, OP_DUP, line);
-        emit2(c, ctx, OP_HAS_FIELD, (uint8_t)id, line);
-        emit_assert(c, line, ctx);
-
-        emit(c, ctx, OP_DUP, line);
-        emit2(c, ctx, OP_RECORD_GET, (uint8_t)id, line);
+        emit2(c, ctx, OP_RECORD_GET_MATCH, (uint8_t)id, line);
         bind_part(c, pattern.cons.arr[2 + 2 * i], seen, line, ctx);
     }
 }
@@ -509,15 +510,8 @@ static void bind_hashmap(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* see
     emit_assert(c, line, ctx);
 
     for (int64_t i = 0; i < n; i++) {
-        sexpr_t key = pattern.cons.arr[1 + 2 * i];
-        emit(c, ctx, OP_DUP, line);
-        compile_sexpr(c, key, false, ctx);
-        emit(c, ctx, OP_HAS_KEY, line);
-        emit_assert(c, line, ctx);
-
-        emit(c, ctx, OP_DUP, line);
-        compile_sexpr(c, key, false, ctx);
-        emit(c, ctx, OP_INDEX, line);
+        compile_sexpr(c, pattern.cons.arr[1 + 2 * i], false, ctx);
+        emit(c, ctx, OP_HASHMAP_GET_MATCH, line);
         bind_part(c, pattern.cons.arr[2 + 2 * i], seen, line, ctx);
     }
 }
@@ -536,11 +530,7 @@ static void bind_list(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen,
     emit_assert(c, line, ctx);
 
     for (int64_t i = 0; i < fixed; i++) {
-        emit(c, ctx, OP_DUP, line);
-        emit(c, ctx, OP_IS_CONS, line);
-        emit_assert(c, line, ctx);
-
-        emit(c, ctx, OP_LIST_UNCONS, line);
+        emit(c, ctx, OP_LIST_UNCONS_MATCH, line);
         bind_part(c, pattern.cons.arr[1 + i], seen, line, ctx);
     }
 
@@ -613,7 +603,7 @@ static void bind_pattern(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* see
             return;
         if (pattern.atom.kind == TOKEN_LITERAL
             && pattern.atom.literal.kind == LITERAL_IDENTIFIER)
-            bind_var(c, pattern.atom.literal.literal, seen, line, ctx);
+            bind_var(c, pattern.atom.literal.literal, seen, true, line, ctx);
         else
             bind_literal(c, pattern, line, ctx);
         return;
@@ -654,7 +644,7 @@ static void compile_destructure(compiler_t* c, sexpr_t pattern, int64_t line, ct
     bind_pattern(c, pattern, &seen, line, ctx);
 }
 
-static void compile_equal(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
+static void compile_equal(compiler_t* c, const sexpr_t* args, int64_t n, bool keep, int64_t line, ctx_t* ctx)
 {
     if (n != 2)
         compiler_malformed(ctx, "assignment", line);
@@ -664,12 +654,14 @@ static void compile_equal(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         || args[0].atom.literal.kind != LITERAL_IDENTIFIER) {
         compile_sexpr(c, args[1], false, ctx);
         compile_destructure(c, args[0], line, ctx);
+        if (!keep)
+            emit(c, ctx, OP_POP, line);
         return;
     }
 
     sv_str_t id = expect_id(args[0], ctx);
     compile_sexpr(c, args[1], false, ctx);
-    add_var(c, id, line, ctx);
+    add_var(c, id, keep, line, ctx);
 }
 
 static void compile_pipe(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, bool is_tail, ctx_t* ctx)
@@ -881,7 +873,7 @@ static void compile_operator(compiler_t* c, operator_kind op, const sexpr_t* arg
         case OPERATOR_GREATER_GREATER: compile_binary_op(c, OP_SHIFT_RIGHT, "shift", args, n, line, ctx); return;
         case OPERATOR_AMP_AMP: compile_binary_op(c, OP_BIT_AND, "bitwise operation", args, n, line, ctx); return;
         case OPERATOR_PIPE_PIPE: compile_binary_op(c, OP_BIT_OR, "bitwise operation", args, n, line, ctx); return;
-        case OPERATOR_EQUAL: compile_equal(c, args, n, line, ctx); return;
+        case OPERATOR_EQUAL: compile_equal(c, args, n, true, line, ctx); return;
         case OPERATOR_EQUAL_EQUAL: compile_binary_op(c, OP_EQUALS, "comparison", args, n, line, ctx); return;
         case OPERATOR_BANG_EQUAL: compile_binary_op(c, OP_NOT_EQUALS, "comparison", args, n, line, ctx); return;
         case OPERATOR_GREATER: compile_binary_op(c, OP_GREATER, "comparison", args, n, line, ctx); return;
@@ -1094,6 +1086,11 @@ static void compile_do(compiler_t* c, const sexpr_t* args, int64_t n, bool is_ta
     init_scope(c);
     for (int64_t i = 0; i < n; i++) {
         bool is_last = i == n - 1;
+        if (!is_last && pattern_is_alias(args[i])) {
+            const sexpr_t* e = args[i].cons.arr;
+            compile_equal(c, e + 1, 2, false, e[0].atom.line, ctx);
+            continue;
+        }
         compile_sexpr(c, args[i], is_last && is_tail, ctx);
         if (!is_last)
             emit(c, ctx, OP_POP, 0);
@@ -1220,7 +1217,7 @@ static void compile_fun(compiler_t* c, const sexpr_t* args, int64_t n, int64_t l
     emit(c, ctx, has_cls ? (uint8_t)cls->cons.size : 0, 0);
     // anonymous: leave the closure on the stack
     if (name.size > 0)
-        add_var(c, name, line, ctx);
+        add_var(c, name, true, line, ctx);
 }
 
 static void compile_fun_group(compiler_t* c, const sexpr_t* members, int64_t n, int64_t line, ctx_t* ctx)
@@ -1267,7 +1264,7 @@ static void compile_fun_group(compiler_t* c, const sexpr_t* members, int64_t n, 
     emit2(c, ctx, (uint8_t)n, (uint8_t)upvalue_base, line);
 
     for (int64_t i = 0; i < n; i++) {
-        add_var(c, expect_id(members[i].cons.arr[0], ctx), line, ctx);
+        add_var(c, expect_id(members[i].cons.arr[0], ctx), true, line, ctx);
         if (i < n - 1)
             emit(c, ctx, OP_POP, line);
     }

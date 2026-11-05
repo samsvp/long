@@ -6,13 +6,13 @@
 #include "value.h"
 #include <math.h>
 
-static void arr_remove(value_arr* arr, const sv_allocator_t* a)
+static inline void arr_remove(value_arr* arr, const sv_allocator_t* a)
 {
     value_t v = sv_vec_pop(*arr);
     value_free(&v, a);
 }
 
-static void arr_remove_n(value_arr* arr, int64_t n, const sv_allocator_t* a)
+static inline void arr_remove_n(value_arr* arr, int64_t n, const sv_allocator_t* a)
 {
     for (int64_t i = arr->size - n; i < arr->size; i++)
         value_free(&arr->arr[i], a);
@@ -956,34 +956,70 @@ DISPATCH(); }
             TRY_PUSH_STACK(res);
             DISPATCH();
         }
-        CASE(OP_LIST_UNCONS): {
-            // v is a view of the stack top, so nothing here frees it
-            value_t v = sv_vec_last(stack);
-            if (!IS_CONS(v))
-                RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0, "Cannot take the head of an empty list");
-
-            list_t rest = ll_tail(AS_LIST(v), a);
-            TRY_OR(rest.cell != NULL, (void)0, "when taking a list tail")
-            value_t tail = value_wrap_list(rest, a);
-            TRY_OR(tail.obj.cell != NULL, ll_deinit(&rest, a), "when taking a list tail")
-
-            value_t first = value_borrow(ll_head(AS_LIST(v)).value);
-            TRY_PUSH_OWNED(tail);
-            TRY_PUSH_OWNED(first);
+#define RAISE_MATCH_FAILED() do {                                                                             \
+    value_t subject = value_borrow(sv_vec_last(stack));                                                       \
+    sv_str_t text = value_to_str(subject, &vm->ctx);                                                          \
+    RAISE(VM_ERR_MATCH_FAILED, value_free(&subject, a); sv_str_deinit(&text, a),                              \
+          "Value does not match the pattern: %.*s", (int)text.size, text.chars);                              \
+} while (0)
+#define LIST_UNCONS(...) do {                                                                                 \
+    /* v is a view of the stack top, so nothing here frees it */                                              \
+    value_t v = sv_vec_last(stack);                                                                           \
+    if (!IS_CONS(v)) {                                                                                        \
+        __VA_ARGS__;                                                                                          \
+    }                                                                                                         \
+    list_t rest = ll_tail(AS_LIST(v), a);                                                                     \
+    TRY_OR(rest.cell != NULL, (void)0, "when taking a list tail")                                             \
+    value_t tail = value_wrap_list(rest, a);                                                                  \
+    TRY_OR(tail.obj.cell != NULL, ll_deinit(&rest, a), "when taking a list tail")                             \
+    value_t first = value_borrow(ll_head(AS_LIST(v)).value);                                                  \
+    TRY_PUSH_OWNED(tail);                                                                                     \
+    TRY_PUSH_OWNED(first);                                                                                    \
+} while (0)
+        CASE(OP_LIST_UNCONS):
+            LIST_UNCONS(RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0, "Cannot take the head of an empty list"));
             DISPATCH();
-        }
+        CASE(OP_LIST_UNCONS_MATCH):
+            LIST_UNCONS(RAISE_MATCH_FAILED());
+            DISPATCH();
+#undef LIST_UNCONS
         CASE(OP_ASSERT_MATCH): {
             value_t test = sv_vec_pop(stack);
             bool passed = IS_BOOL(test) && test.boolean;
             value_free(&test, a);
             if (passed)
                 DISPATCH();
-
-            value_t subject = value_borrow(sv_vec_last(stack));
-            sv_str_t text = value_to_str(subject, &vm->ctx);
-            RAISE(VM_ERR_MATCH_FAILED, value_free(&subject, a); sv_str_deinit(&text, a),
-                  "Value does not match the pattern: %.*s", (int)text.size, text.chars);
+            RAISE_MATCH_FAILED();
         }
+        CASE(OP_RECORD_GET_MATCH): {
+            uint8_t id = READ_BYTE();
+            value_t v = sv_vec_last(stack);
+            sv_opt_t(value_t) field = IS_RECORD(v) ? record_get(AS_RECORD(v), id) : sv_opt_none_t(value_t);
+            if (!field.is_some)
+                RAISE_MATCH_FAILED();
+            TRY_PUSH_STACK(value_borrow(field.value));
+            DISPATCH();
+        }
+        CASE(OP_TUPLE_GET_MATCH): {
+            uint8_t i = READ_BYTE();
+            value_t v = sv_vec_last(stack);
+            sv_opt_t(value_t) item = IS_TUPLE(v) ? tuple_get(AS_TUPLE(v), i) : sv_opt_none_t(value_t);
+            if (!item.is_some)
+                RAISE_MATCH_FAILED();
+            TRY_PUSH_STACK(value_borrow(item.value));
+            DISPATCH();
+        }
+        CASE(OP_HASHMAP_GET_MATCH): {
+            value_t key = sv_vec_pop(stack);
+            value_t v = sv_vec_last(stack);
+            sv_opt_t(value_t) item = IS_MAP(v) ? map_get(AS_MAP(v), key) : sv_opt_none_t(value_t);
+            value_free(&key, a);
+            if (!item.is_some)
+                RAISE_MATCH_FAILED();
+            TRY_PUSH_STACK(value_borrow(item.value));
+            DISPATCH();
+        }
+#undef RAISE_MATCH_FAILED
         CASE(OP_NO_MATCH): {
             value_t subject = value_borrow(sv_vec_last(stack));
             sv_str_t text = value_to_str(subject, &vm->ctx);

@@ -1264,6 +1264,22 @@ static inline void sv_test_compiler_destructure(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("p = {x: 8, y: 1}\n{x, y} = p\nx + y", 9));
    sv_test_run(t, sv_test_compiler_num("p = {x: 4, y: 9}\nmatch p | {x, ..} do x end", 4));
    sv_test_run(t, sv_test_compiler_err("p = {nope}") == C_ERR_UNDEFINED_VARIABLE);
+   sv_test_run(t, sv_test_compiler_runtime_err("{x, ..} = {y: 1}") == VM_ERR_MATCH_FAILED);
+   sv_test_run(t, sv_test_compiler_runtime_err("fun f({x: a, ..}) a\nf({y: 1})") == VM_ERR_MATCH_FAILED);
+   sv_test_run(t, sv_test_compiler_runtime_msg("{x, ..} = {y: 1}",
+      "Line 1: Value does not match the pattern: {y: 1}"));
+   sv_test_run(t, sv_test_compiler_num("fun f((a, (b, c))) a + b + c\nf((1, (2, 3)))", 6));
+   sv_test_run(t, sv_test_compiler_runtime_msg("(a, b) = (1, 2, 3)",
+      "Line 1: Value does not match the pattern: (1, 2, 3)"));
+   sv_test_run(t, sv_test_compiler_num("fun f([a, b, ..t]) a + b\nf([1, 2, 3])", 3));
+   sv_test_run(t, sv_test_compiler_runtime_err("[a, b] = [1]") == VM_ERR_MATCH_FAILED);
+   sv_test_run(t, sv_test_compiler_runtime_msg("[a, b] = [1]",
+      "Line 1: Value does not match the pattern: []"));
+   sv_test_run(t, sv_test_compiler_num(
+      "fun f(%{\"a\": v, \"b\": w, ..}) v + w\nf(%{\"a\": 1, \"b\": 2, \"c\": 3})", 3));
+   sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v, ..} = %{\"b\": 1}") == VM_ERR_MATCH_FAILED);
+   sv_test_run(t, sv_test_compiler_runtime_msg("%{\"a\": v, ..} = %{\"b\": 1}",
+      "Line 1: Value does not match the pattern: %{b: 1}"));
 
    sv_test_run(t, sv_test_compiler_num("%{\"a\": v, ..} = %{\"a\": 5, \"b\": 6}\nv", 5));
    sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v} = %{\"a\": 5, \"b\": 6}\nv")
