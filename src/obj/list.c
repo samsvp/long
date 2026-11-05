@@ -1,5 +1,6 @@
 #include "list.h"
 #include "../value.h"
+#include "../obj.h"
 
 #define COPY_THRESH 32
 #define ERR_LIST (list_t){0}

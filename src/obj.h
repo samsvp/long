@@ -49,4 +49,17 @@ typedef struct obj_t {
 
 sv_rc_cell_def(obj_t);
 
+static inline void value_free(value_t* v, const sv_allocator_t* a)
+{
+    if (v->kind == VALUE_OBJ)
+        sv_rc_deinit(&v->obj, a);
+}
+
+static inline value_t value_borrow(value_t v)
+{
+    if (v.kind == VALUE_OBJ)
+        v.obj = sv_rc_borrow(v.obj);
+    return v;
+}
+
 #endif

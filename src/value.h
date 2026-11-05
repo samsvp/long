@@ -78,12 +78,10 @@ static const value_t value_false = { .kind = VALUE_BOOL, .boolean = false };
 
 sv_opt_def(value_t);
 
-void value_free(value_t*, const sv_allocator_t*);
 /**
  * Frees every value in the vector and the vector itself.
  */
 void value_arr_deinit(sv_vec_t(value_t)*, const sv_allocator_t*);
-value_t value_borrow(value_t);
 /**
  * Only nil, false and undefined are falsy.
  */

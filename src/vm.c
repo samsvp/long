@@ -188,6 +188,15 @@ static bool is_safe_int(double x)
     return x == floor(x) && fabs(x) <= 0x1p53;
 }
 
+#ifndef LONG_COMPUTED_GOTO
+  #if defined(_MSC_VER) && !defined(__clang__)
+    // No computed gotos in Visual Studio.
+    #define LONG_COMPUTED_GOTO 0
+  #else
+    #define LONG_COMPUTED_GOTO 1
+  #endif
+#endif
+
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 {
 #define TRY_NOT_NULL(v, err_msg) TRY_OR((v) != NULL, (void)0, err_msg)
@@ -237,20 +246,20 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 #define SET(arr) {                                                                                            \
     value_t v = sv_vec_pop(stack);                                                                            \
     TRY_PUSH(arr, v);                                                                                         \
-    break; }
+    DISPATCH(); }
 
 #define GET(src, base) {                                                                                      \
     uint32_t i = 0;                                                                                           \
     READ_ARG(i);                                                                                              \
     TRY_PUSH_STACK(value_borrow((src).arr[(base) + i]));                                                      \
-    break; }
+    DISPATCH(); }
 
 #define IS_KIND(test) {                                                                                       \
     value_t v = sv_vec_pop(stack);                                                                            \
     value_t res = { .kind = VALUE_BOOL, .boolean = (test) };                                                  \
     value_free(&v, a);                                                                                        \
     TRY_PUSH_STACK(res);                                                                                      \
-    break; }
+    DISPATCH(); }
 
 #define IS_SIZED(is, as, field) {                                                                             \
     uint8_t want = READ_BYTE();                                                                               \
@@ -258,7 +267,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
     value_t res = { .kind = VALUE_BOOL, .boolean = is(v) && as(v).field == want };                            \
     value_free(&v, a);                                                                                        \
     TRY_PUSH_STACK(res);                                                                                      \
-    break; }
+    DISPATCH(); }
 
 #define NUM_BIN_OP(op, res_kind, res_field) {                                                                 \
     value_t v2 = sv_vec_pop(stack);                                                                           \
@@ -268,7 +277,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
               "Invalid operands for '%s': %s and %s", #op, TYPE_NAME(v1), TYPE_NAME(v2));                     \
     value_t res = {.kind = res_kind, .res_field = v1.number op v2.number};                                    \
     TRY_PUSH_STACK(res);                                                                                      \
-    break; }
+    DISPATCH(); }
 
 #define INT_BIN_OP(sym, is_shift, expr, overflowed) {                                                         \
     value_t v2 = sv_vec_pop(stack);                                                                           \
@@ -293,7 +302,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
               "Result of '%s' is outside -2^53 to 2^53", sym);                                                \
     value_t res = {.kind = VALUE_NUMBER, .number = (double)r};                                                \
     TRY_PUSH_STACK(res);                                                                                      \
-    break; }
+    DISPATCH(); }
 
 #define MATH_OP(op) NUM_BIN_OP(op, VALUE_NUMBER, number)
 #define CMP_OP(op) NUM_BIN_OP(op, VALUE_BOOL, boolean)
@@ -305,7 +314,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
     value_free(&v1, a);                                                                                       \
     value_free(&v2, a);                                                                                       \
     TRY_PUSH_STACK(res);                                                                                      \
-break; }
+DISPATCH(); }
 
     const sv_allocator_t* a = vm->ctx.alloc;
     const int64_t base = vm->call_frames.size;
@@ -320,51 +329,71 @@ break; }
     const uint8_t* code = frame->fn->chunk.bytecode.arr;
     const uint8_t* ip = code + frame->ip;
 
-    while (1) switch (READ_BYTE()) {
-        case OP_SET_LOCAL: SET(vm->locals)
-        case OP_SET_GLOBAL: SET(vm->globals)
-        case OP_GET_LOCAL: GET(vm->locals, frame->locals_offset)
-        case OP_GET_UPVALUE: GET(frame->upvalues, 0)
-        case OP_GET_GLOBAL: GET(vm->globals, 0)
-        case OP_LOAD_CONSTANT: GET(frame->fn->chunk.constants, 0)
-        case OP_SUB: MATH_OP(-)
-        case OP_MUL: MATH_OP(*)
-        case OP_DIV: MATH_OP(/)
-        case OP_SHIFT_LEFT: INT_BIN_OP("<<", true, (int64_t)((uint64_t)x << y), (r >> y) != x)
-        case OP_SHIFT_RIGHT: INT_BIN_OP(">>", true, x >> y, false)
-        case OP_BIT_AND: INT_BIN_OP("&&", false, x & y, false)
-        case OP_BIT_OR: INT_BIN_OP("||", false, x | y, false)
-        case OP_EQUALS: EQUALS(true)
-        case OP_NOT_EQUALS: EQUALS(false)
-        case OP_GREATER: CMP_OP(>)
-        case OP_GREATER_EQUAL: CMP_OP(>=)
-        case OP_LESS: CMP_OP(<)
-        case OP_LESS_EQUAL: CMP_OP(<=)
-        case OP_JUMP: ip += OFFSET(); break;
-        case OP_JUMP_BACK: ip -= OFFSET(); break;
-        case OP_JUMP_IF_FALSE: {
+#if LONG_COMPUTED_GOTO
+    __extension__ static const void* dispatch_table[] = {
+#define OP_CODE(op) &&code_##op,
+        #include "vm_instructions.h"
+#undef OP_CODE
+    };
+
+    #define CASE(word) code_##word
+    #define DISPATCH() __extension__ ({ goto *dispatch_table[READ_BYTE()]; })
+#else
+    #define CASE(word) case word
+    #define DISPATCH() break
+#endif
+
+#ifdef LONG_COMPUTED_GOTO
+    DISPATCH();
+#else
+    while (1)
+    switch (READ_BYTE())
+#endif
+{
+        CASE(OP_SET_LOCAL): SET(vm->locals)
+        CASE(OP_SET_GLOBAL): SET(vm->globals)
+        CASE(OP_GET_LOCAL): GET(vm->locals, frame->locals_offset)
+        CASE(OP_GET_UPVALUE): GET(frame->upvalues, 0)
+        CASE(OP_GET_GLOBAL): GET(vm->globals, 0)
+        CASE(OP_LOAD_CONSTANT): GET(frame->fn->chunk.constants, 0)
+        CASE(OP_SUB): MATH_OP(-)
+        CASE(OP_MUL): MATH_OP(*)
+        CASE(OP_DIV): MATH_OP(/)
+        CASE(OP_SHIFT_LEFT): INT_BIN_OP("<<", true, (int64_t)((uint64_t)x << y), (r >> y) != x)
+        CASE(OP_SHIFT_RIGHT): INT_BIN_OP(">>", true, x >> y, false)
+        CASE(OP_BIT_AND): INT_BIN_OP("&&", false, x & y, false)
+        CASE(OP_BIT_OR): INT_BIN_OP("||", false, x | y, false)
+        CASE(OP_EQUALS): EQUALS(true)
+        CASE(OP_NOT_EQUALS): EQUALS(false)
+        CASE(OP_GREATER): CMP_OP(>)
+        CASE(OP_GREATER_EQUAL): CMP_OP(>=)
+        CASE(OP_LESS): CMP_OP(<)
+        CASE(OP_LESS_EQUAL): CMP_OP(<=)
+        CASE(OP_JUMP): ip += OFFSET(); DISPATCH();
+        CASE(OP_JUMP_BACK): ip -= OFFSET(); DISPATCH();
+        CASE(OP_JUMP_IF_FALSE): {
             value_t v = sv_vec_pop(stack);
             ip = value_is_truthy(v) ? ip + 2 : ip + OFFSET();
             value_free(&v, a);
-            break;
+            DISPATCH();
         }
-        case OP_POP: arr_remove(&stack, a); break;
-        case OP_POP_LOCAL: {
+        CASE(OP_POP): arr_remove(&stack, a); DISPATCH();
+        CASE(OP_POP_LOCAL): {
             uint32_t n = 0;
             READ_ARG(n);
             arr_remove_n(&vm->locals, n, a);
-            break;
+            DISPATCH();
         }
-        case OP_NEGATE: {
+        CASE(OP_NEGATE): {
             value_t v = sv_vec_pop(stack);
             if (!IS_NUMBER(v))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v, a),
                       "Invalid operand for '-': %s", TYPE_NAME(v));
             value_t res = {.kind = VALUE_NUMBER, .number = -v.number};
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
-        case OP_MOD: {
+        CASE(OP_MOD): {
             value_t v2 = sv_vec_pop(stack);
             value_t v1 = sv_vec_pop(stack);
             if (!IS_NUMBER(v1) || !IS_NUMBER(v2))
@@ -372,7 +401,7 @@ break; }
                       "Invalid operands for '%%': %s and %s", TYPE_NAME(v1), TYPE_NAME(v2));
             value_t res = {.kind = VALUE_NUMBER, .number = fmod(v1.number, v2.number)};
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
 
 #define VALUE_FROM_ARR(mult, init_fn, n_type, read) {                                                         \
@@ -382,12 +411,12 @@ break; }
             TRY_NOT_NULL(arr.obj.cell, "when creating collection");                                           \
             arr_remove_n(&stack, (mult) * n, a);                                                              \
             TRY_PUSH_OWNED(arr);                                                                              \
-            break; }
+            DISPATCH(); }
 
-        case OP_LIST: VALUE_FROM_ARR(1, value_init_list, uint32_t, READ_ARG);
-        case OP_HASHMAP: VALUE_FROM_ARR(2, value_init_map, uint32_t, READ_ARG);
-        case OP_RECORD: VALUE_FROM_ARR(2, value_init_record, uint8_t, READ_NARROW);
-        case OP_TUPLE: VALUE_FROM_ARR(1, value_init_tuple, uint8_t, READ_NARROW);
+        CASE(OP_LIST): VALUE_FROM_ARR(1, value_init_list, uint32_t, READ_ARG);
+        CASE(OP_HASHMAP): VALUE_FROM_ARR(2, value_init_map, uint32_t, READ_ARG);
+        CASE(OP_RECORD): VALUE_FROM_ARR(2, value_init_record, uint8_t, READ_NARROW);
+        CASE(OP_TUPLE): VALUE_FROM_ARR(1, value_init_tuple, uint8_t, READ_NARROW);
 
 #define OP_MAP_X(fn) do {                                                                                     \
     uint32_t n = sv_vec_pop(stack).number;                                                                    \
@@ -396,15 +425,15 @@ break; }
     arr_remove_n(&stack, n, a);                                                                               \
     TRY_PUSH_OWNED(arr);                                                                                      \
 } while(0)
-        case OP_LIST_STACK:
+        CASE(OP_LIST_STACK):
             OP_MAP_X(value_init_list);
-            break;
-        case OP_LIST_FILTER:
+            DISPATCH();
+        CASE(OP_LIST_FILTER):
             OP_MAP_X(value_init_list_filter);
-            break;
+            DISPATCH();
 #undef OP_MAP_X
 
-        case OP_RECORD_UPDATE: {
+        CASE(OP_RECORD_UPDATE): {
             uint8_t n = READ_BYTE();
             value_t base = sv_vec_pop(stack);
             if (!IS_RECORD(base))
@@ -425,9 +454,9 @@ break; }
             arr_remove_n(&stack, 2 * n, a);
             value_free(&base, a);
             TRY_PUSH_OWNED(out);
-            break;
+            DISPATCH();
         }
-        case OP_HASHMAP_UPDATE: {
+        CASE(OP_HASHMAP_UPDATE): {
             uint32_t n = 0;
             READ_ARG(n);
             value_t base = sv_vec_pop(stack);
@@ -450,9 +479,9 @@ break; }
 
             arr_remove_n(&stack, 2 * n, a);
             TRY_PUSH_OWNED(out);
-            break;
+            DISPATCH();
         }
-        case OP_LIST_PREPEND: {
+        CASE(OP_LIST_PREPEND): {
             uint32_t n = 0;
             READ_ARG(n);
             value_t tail = sv_vec_pop(stack);
@@ -469,15 +498,15 @@ break; }
             arr_remove_n(&stack, n, a);
             value_free(&tail, a);
             TRY_PUSH_OWNED(out);
-            break;
+            DISPATCH();
         }
-        case OP_ADD: {
+        CASE(OP_ADD): {
             value_t v2 = sv_vec_pop(stack);
             value_t v1 = sv_vec_pop(stack);
             if (IS_NUMBER(v1) && IS_NUMBER(v2)) {
                 value_t res = {.kind = VALUE_NUMBER, .number = v1.number + v2.number};
                 TRY_PUSH_STACK(res);
-                break;
+                DISPATCH();
             }
             if (v1.kind == VALUE_OBJ && v2.kind == VALUE_OBJ
                 && v1.obj.cell->value.kind == OBJ_STR && v2.obj.cell->value.kind == OBJ_STR
@@ -489,31 +518,31 @@ break; }
                 value_t res = value_init_str_own(s, a);
                 TRY_NOT_NULL(res.obj.cell, "when creating string");
                 TRY_PUSH_OWNED(res);
-                break;
+                DISPATCH();
             }
             RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v1, a); value_free(&v2, a),
                   "Invalid operands for '+': %s and %s", TYPE_NAME(v1), TYPE_NAME(v2));
         }
-        case OP_NOT: {
+        CASE(OP_NOT): {
             value_t v = sv_vec_pop(stack);
             value_t res = {.kind = VALUE_BOOL, .boolean = !value_is_truthy(v)};
             value_free(&v, a);
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
-        case OP_SWAP: {
+        CASE(OP_SWAP): {
             value_t top = sv_vec_pop(stack);
             value_t under = sv_vec_pop(stack);
             TRY_PUSH_OWNED(top);
             TRY_PUSH_OWNED(under);
-            break;
+            DISPATCH();
         }
-        case OP_DUP: {
+        CASE(OP_DUP): {
             value_t top = value_borrow(sv_vec_last(stack));
             TRY_PUSH_STACK(top);
-            break;
+            DISPATCH();
         }
-        case OP_INDEX: {
+        CASE(OP_INDEX): {
             value_t key = sv_vec_pop(stack);
             value_t container = sv_vec_pop(stack);
             if (!IS_MAP(container) && !IS_LIST(container) && !IS_TUPLE(container) && !IS_STR(container))
@@ -555,7 +584,7 @@ break; }
             value_free(&container, a);
             value_free(&key, a);
             TRY_PUSH_OWNED(out);
-            break;
+            DISPATCH();
 
         index_err: {
             value_free(&container, a);
@@ -564,7 +593,7 @@ break; }
                   "Key not found: %.*s", (int)text.size, text.chars);
             }
         }
-        case OP_SLICE: {
+        CASE(OP_SLICE): {
             value_t to = sv_vec_pop(stack);
             value_t from = sv_vec_pop(stack);
             value_t container = sv_vec_pop(stack);
@@ -596,9 +625,9 @@ break; }
 
             value_free(&container, a);
             TRY_PUSH_OWNED(out);
-            break;
+            DISPATCH();
         }
-        case OP_HASHMAP_GET_OR_UNDEF: {
+        CASE(OP_HASHMAP_GET_OR_UNDEF): {
             value_t key = sv_vec_pop(stack);
             value_t container = sv_vec_pop(stack);
             if (!IS_MAP(container))
@@ -613,7 +642,7 @@ break; }
             value_free(&container, a);
             value_free(&key, a);
             TRY_PUSH_OWNED(out);
-            break;
+            DISPATCH();
         }
 #define RECORD_GET(...) do {                                                                                  \
     value_t val = sv_vec_pop(stack);                                                                          \
@@ -635,15 +664,15 @@ break; }
     value_free(&val, a);                                                                                      \
     TRY_PUSH_OWNED(out);                                                                                      \
 } while (0)
-        case OP_RECORD_GET:
+        CASE(OP_RECORD_GET):
             RECORD_GET(RAISE(VM_ERR_FIELD_NOT_FOUND, value_free(&val, a),
                              "Record has no field '%s'", vm_field_name(&vm->ctx, id)));
-            break;
-        case OP_RECORD_GET_OR_UNDEF:
+            DISPATCH();
+        CASE(OP_RECORD_GET_OR_UNDEF):
             RECORD_GET(v.value = value_undefined);
-            break;
+            DISPATCH();
 #undef RECORD_GET
-        case OP_LENGTH: {
+        CASE(OP_LENGTH): {
             value_t val = sv_vec_pop(stack);
             value_t ret = { .kind = VALUE_NUMBER };
             if (IS_RECORD(val))
@@ -659,9 +688,9 @@ break; }
                       "Type has no length: %s", TYPE_NAME(val));
             value_free(&val, a);
             TRY_PUSH_STACK(ret);
-            break;
+            DISPATCH();
         }
-        case OP_ACTOR_VTABLE: {
+        CASE(OP_ACTOR_VTABLE): {
             uint32_t i = 0;
             READ_ARG(i);
             value_t call_fn = sv_vec_pop(stack);
@@ -673,9 +702,9 @@ break; }
             value_free(&update_fn, a);
             value_free(&get_fn, a);
             value_free(&call_fn, a);
-            break;
+            DISPATCH();
         }
-        case OP_ACTOR: {
+        CASE(OP_ACTOR): {
             uint32_t i = 0;
             READ_ARG(i);
             value_t state = sv_vec_pop(stack);
@@ -683,9 +712,9 @@ break; }
             value_t v = value_wrap_actor(&actor, a);
             TRY_OR(v.obj.cell != NULL, value_free(&state, a), "when creating actor");
             TRY_PUSH_OWNED(v);
-            break;
+            DISPATCH();
         }
-        case OP_ITER_CREATE: {
+        CASE(OP_ITER_CREATE): {
             value_t v = sv_vec_pop(stack);
             if (!IS_LIST(v) && !IS_STR(v) && !IS_MAP(v))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v, a),
@@ -694,9 +723,9 @@ break; }
             value_free(&v, a);
             TRY_NOT_NULL(iter.obj.cell, "when creating iterator");
             TRY_PUSH_OWNED(iter);
-            break;
+            DISPATCH();
         }
-        case OP_ITER_NEXT: {
+        CASE(OP_ITER_NEXT): {
             value_t v = sv_vec_pop(stack);
             if (!IS_ITER(v))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v, a),
@@ -709,9 +738,9 @@ break; }
             value_t item = next.is_some ? next.value : value_nil;
             TRY_PUSH_STACK(has);
             TRY_PUSH_OWNED(item);
-            break;
+            DISPATCH();
         }
-        case OP_LOAD_CLOSURE: {
+        CASE(OP_LOAD_CLOSURE): {
             uint32_t i = 0;
             READ_ARG(i);
             uint8_t n_cls = READ_BYTE();
@@ -723,9 +752,9 @@ break; }
             TRY_NOT_NULL(cls.obj.cell, "when creating closure");
             arr_remove_n(&stack, n_cls, a);
             TRY_PUSH_OWNED(cls);
-            break;
+            DISPATCH();
         }
-        case OP_CREATE_GROUP: {
+        CASE(OP_CREATE_GROUP): {
             uint32_t first = 0;
             READ_ARG(first);
             uint8_t n_members = READ_BYTE();
@@ -761,16 +790,16 @@ break; }
                 stack.arr[stack.size++] = member;
             }
             sv_rc_deinit(&group, a);
-            break;
+            DISPATCH();
         }
-        case OP_GET_MEMBER: {
+        CASE(OP_GET_MEMBER): {
             uint8_t i = READ_BYTE();
             if (frame->group.cell == NULL)
                 RAISE(VM_ERR_NO_GROUP, (void)0, "No closure group in scope");
             value_t member = value_init_closure_member(sv_rc_borrow(frame->group), i, a);
             TRY_NOT_NULL(member.obj.cell, "when creating closure member");
             TRY_PUSH_OWNED(member);
-            break;
+            DISPATCH();
         }
 #define ERR_WRONG_ARITY(name, arity)                                                                          \
     RAISE(VM_ERR_BAD_ARITY, value_free(&value, a),                                                            \
@@ -786,7 +815,7 @@ break; }
     const value_t* args = &stack.arr[stack.size - arg_count];                                                 \
     if (IS_NATIVE(value)) {                                                                                   \
         CALL_NATIVE(value);                                                                                   \
-        break;                                                                                                \
+        DISPATCH();                                                                                                \
     }
 
 #define CALL_NATIVE(value) do {                                                                               \
@@ -843,7 +872,7 @@ break; }
     sv_vec_push(&vm->locals, value, &success, a);                                                             \
     TRY_OR(success, value_free(&value, a), "when passing arguments");                                         \
 } while (0)
-        case OP_CALL: {
+        CASE(OP_CALL): {
             LOAD_FN();
             INIT_FN_VM(fn, upvalues, group);
 
@@ -858,9 +887,9 @@ break; }
             TRY_PUSH(vm->call_frames, init_frame(fn, locals_offset, stack.size, upvalues, group));
             frame = &sv_vec_last(vm->call_frames);
             LOAD_CODE();
-            break;
+            DISPATCH();
         }
-        case OP_TAIL_CALL: {
+        CASE(OP_TAIL_CALL): {
             LOAD_FN();
             INIT_FN_VM(fn, upvalues, group);
 
@@ -873,25 +902,25 @@ break; }
             sv_vec_last(vm->call_frames) = init_frame(fn, locals_offset, stack.size, upvalues, group);
             frame = &sv_vec_last(vm->call_frames);
             LOAD_CODE();
-            break;
+            DISPATCH();
 #undef ERR_WRONG_ARITY
 #undef LOAD_ARGS
 #undef LOAD_FN
 #undef INIT_FN_VM
 #undef CALL_NATIVE
         }
-        case OP_IS_STR: IS_KIND(IS_STR(v))
-        case OP_IS_NUMBER: IS_KIND(IS_NUMBER(v))
-        case OP_IS_ATOM: IS_KIND(IS_ATOM(v))
-        case OP_IS_BOOL: IS_KIND(IS_BOOL(v))
-        case OP_IS_NIL: IS_KIND(IS_NIL(v))
-        case OP_IS_LIST: IS_KIND(IS_LIST(v))
-        case OP_IS_NIL_LIST: IS_KIND(IS_LIST(v) && ll_count(AS_LIST(v)) == 0)
-        case OP_IS_CONS: IS_KIND(IS_CONS(v))
-        case OP_IS_RECORD_ANY: IS_KIND(IS_RECORD(v))
-        case OP_IS_TUPLE: IS_SIZED(IS_TUPLE, AS_TUPLE, size)
-        case OP_IS_RECORD: IS_SIZED(IS_RECORD, AS_RECORD, size)
-        case OP_IS_HASHMAP: {
+        CASE(OP_IS_STR): IS_KIND(IS_STR(v))
+        CASE(OP_IS_NUMBER): IS_KIND(IS_NUMBER(v))
+        CASE(OP_IS_ATOM): IS_KIND(IS_ATOM(v))
+        CASE(OP_IS_BOOL): IS_KIND(IS_BOOL(v))
+        CASE(OP_IS_NIL): IS_KIND(IS_NIL(v))
+        CASE(OP_IS_LIST): IS_KIND(IS_LIST(v))
+        CASE(OP_IS_NIL_LIST): IS_KIND(IS_LIST(v) && ll_count(AS_LIST(v)) == 0)
+        CASE(OP_IS_CONS): IS_KIND(IS_CONS(v))
+        CASE(OP_IS_RECORD_ANY): IS_KIND(IS_RECORD(v))
+        CASE(OP_IS_TUPLE): IS_SIZED(IS_TUPLE, AS_TUPLE, size)
+        CASE(OP_IS_RECORD): IS_SIZED(IS_RECORD, AS_RECORD, size)
+        CASE(OP_IS_HASHMAP): {
             value_t v = sv_vec_pop(stack);
             value_t want = sv_vec_pop(stack);
             value_t res = { .kind = VALUE_BOOL,
@@ -899,25 +928,25 @@ break; }
             value_free(&v, a);
             value_free(&want, a);
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
-        case OP_IS_HASHMAP_ANY: {
+        CASE(OP_IS_HASHMAP_ANY): {
             value_t v = sv_vec_pop(stack);
             value_t res = { .kind = VALUE_BOOL, .boolean = IS_MAP(v) };
             value_free(&v, a);
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
-        case OP_HAS_FIELD: {
+        CASE(OP_HAS_FIELD): {
             value_t v = sv_vec_pop(stack);
             uint8_t id = READ_BYTE();
             value_t res = { .kind = VALUE_BOOL,
                             .boolean = IS_RECORD(v) && record_get(AS_RECORD(v), id).is_some };
             value_free(&v, a);
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
-        case OP_HAS_KEY: {
+        CASE(OP_HAS_KEY): {
             value_t key = sv_vec_pop(stack);
             value_t v = sv_vec_pop(stack);
             value_t res = { .kind = VALUE_BOOL,
@@ -925,9 +954,9 @@ break; }
             value_free(&key, a);
             value_free(&v, a);
             TRY_PUSH_STACK(res);
-            break;
+            DISPATCH();
         }
-        case OP_LIST_UNCONS: {
+        CASE(OP_LIST_UNCONS): {
             // v is a view of the stack top, so nothing here frees it
             value_t v = sv_vec_last(stack);
             if (!IS_CONS(v))
@@ -941,30 +970,30 @@ break; }
             value_t first = value_borrow(ll_head(AS_LIST(v)).value);
             TRY_PUSH_OWNED(tail);
             TRY_PUSH_OWNED(first);
-            break;
+            DISPATCH();
         }
-        case OP_ASSERT_MATCH: {
+        CASE(OP_ASSERT_MATCH): {
             value_t test = sv_vec_pop(stack);
             bool passed = IS_BOOL(test) && test.boolean;
             value_free(&test, a);
             if (passed)
-                break;
+                DISPATCH();
 
             value_t subject = value_borrow(sv_vec_last(stack));
             sv_str_t text = value_to_str(subject, &vm->ctx);
             RAISE(VM_ERR_MATCH_FAILED, value_free(&subject, a); sv_str_deinit(&text, a),
                   "Value does not match the pattern: %.*s", (int)text.size, text.chars);
         }
-        case OP_NO_MATCH: {
+        CASE(OP_NO_MATCH): {
             value_t subject = value_borrow(sv_vec_last(stack));
             sv_str_t text = value_to_str(subject, &vm->ctx);
             RAISE(VM_ERR_NO_CLAUSE, value_free(&subject, a); sv_str_deinit(&text, a),
                   "No clause matched: %.*s", (int)text.size, text.chars);
         }
-        case OP_EXTENDED_ARG:
+        CASE(OP_EXTENDED_ARG):
             arg_bytes = READ_BYTE();
-            break;
-        case OP_RETURN: {
+            DISPATCH();
+        CASE(OP_RETURN): {
             if (vm->call_frames.size == base) {
                 vm->stack = stack;
                 vm->call_frames.size--;
@@ -977,10 +1006,8 @@ break; }
             frame = &sv_vec_last(vm->call_frames);
             LOAD_CODE();
             TRY_PUSH_OWNED(res);
-            break;
+            DISPATCH();
         }
-        default:
-            RAISE(VM_ERR_NOT_IMPLEMENTED, (void)0, "Instruction %u not implemented", (unsigned)ip[-1]);
     }
 
     return sv_opt_none_t(error_t);

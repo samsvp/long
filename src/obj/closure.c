@@ -1,5 +1,6 @@
 #include "closure.h"
 #include "../value.h"
+#include "../obj.h"
 
 fn_t* cls_get_vm(closure_t cls)
 {

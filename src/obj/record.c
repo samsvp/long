@@ -1,5 +1,6 @@
 #include "record.h"
 #include <stdlib.h>
+#include "../obj.h"
 
 static int record_cmp(const void* r1, const void* r2)
 {

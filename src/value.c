@@ -12,13 +12,6 @@
 
 #define ERR_VALUE (value_t){ .kind = VALUE_OBJ }
 
-
-void value_free(value_t* v, const sv_allocator_t* a)
-{
-    if (v->kind == VALUE_OBJ)
-        sv_rc_deinit(&v->obj, a);
-}
-
 void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
 {
     sv_vec_foreach(value_t, v, arr)
@@ -38,25 +31,6 @@ bool value_is_truthy(value_t v)
         case VALUE_OBJ: return true;
     }
     return true;
-}
-
-value_t value_borrow(value_t v)
-{
-    switch (v.kind) {
-        case VALUE_OBJ:
-            return (value_t){
-                .kind = VALUE_OBJ,
-                .obj = sv_rc_borrow(v.obj),
-            };
-        case VALUE_NIL:
-        case VALUE_BOOL:
-        case VALUE_NUMBER:
-        case VALUE_ATOM:
-        case VALUE_C:
-        case VALUE_UNDEFINED:
-        default:
-            return v;
-    }
 }
 
 static bool list_eql(list_t x, list_t y)
