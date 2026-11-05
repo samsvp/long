@@ -32,7 +32,7 @@ static value_t wrap_list(list_t list, vm_t* vm)
 {
     CHECK_OOM(list.cell);
     value_t ret = value_wrap_list(list, vm->ctx.alloc);
-    if (ret.obj.cell == NULL) {
+    if (AS_OBJ(ret).cell == NULL) {
         ll_deinit(&list, vm->ctx.alloc);
         return oom_error(&vm->ctx);
     }
@@ -72,7 +72,7 @@ static value_t map_filter_list(value_t value, value_t fn, bool with_index, bool 
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
     double i = 0;
     while (v = iterable_next(&iter, a), v.is_some) {
-        value_t args[] = { v.value, (value_t){ .kind = VALUE_NUMBER, .number = i++ } };
+        value_t args[] = { v.value, value_number(i++) };
         value_t ret = vm_call_value(vm, fn, args, with_index ? 2 : 1);
         if (IS_ERR(ret)) {
             value_free(&v.value, a);
@@ -109,7 +109,7 @@ static value_t reduce_list(value_t value, value_t fn, value_t acc, bool with_ind
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
     double i = 0;
     while (v = iterable_next(&iter, a), v.is_some) {
-        value_t args[] = { v.value, acc, (value_t){ .kind = VALUE_NUMBER, .number = i++ } };
+        value_t args[] = { v.value, acc, value_number(i++) };
         value_t new_acc = vm_call_value(vm, fn, args, with_index ? 3 : 2);
         value_free(&v.value, a);
         value_free(&acc, a);
@@ -165,7 +165,7 @@ value_t ntvl_add(const value_t* args, uint8_t n, vm_t* vm)
     list_t list = ll_add(AS_LIST(args[0]), AS_LIST(args[1]), vm->ctx.alloc);
     CHECK_OOM(list.cell);
     value_t value = value_wrap_list(list, vm->ctx.alloc);
-    CHECK_OOM(value.obj.cell);
+    CHECK_OOM(AS_OBJ(value).cell);
     return value;
 }
 
@@ -205,7 +205,7 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
         value_t tuple = value_init_tuple(z, 2, a);
         value_free(&v1.value, a);
         value_free(&v2.value, a);
-        oom = tuple.obj.cell == NULL;
+        oom = AS_OBJ(tuple).cell == NULL;
         if (!oom)
             vec.arr[l1_n - ++vec.size] = tuple;
     }
@@ -236,7 +236,7 @@ static value_t map_window(value_t val, value_t f, value_t window_len,
     int64_t count = ll_count(l);
     if (w > count) {
         value_t ret = value_wrap_list(ll_empty(), vm->ctx.alloc);
-        CHECK_OOM(ret.obj.cell);
+        CHECK_OOM(AS_OBJ(ret).cell);
         return ret;
     }
 
@@ -377,7 +377,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
 
     if (k_size == 0) {
         value_t empty = value_wrap_list(ll_empty(), a);
-        CHECK_OOM(empty.obj.cell);
+        CHECK_OOM(AS_OBJ(empty).cell);
         sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, 1, a);
         if (vec.arr == NULL) {
             value_free(&empty, a);
@@ -445,8 +445,8 @@ oom:
 static int value_num_cmp(void* ctx, const void* a, const void* b)
 {
     (void)ctx;
-    double x = ((const value_t*)a)->number;
-    double y = ((const value_t*)b)->number;
+    double x = AS_NUMBER(*(const value_t*)a);
+    double y = AS_NUMBER(*(const value_t*)b);
     return (x < y) - (x > y);
 }
 
@@ -575,9 +575,9 @@ static value_t min_max(const value_t* args, uint8_t n, bool is_max, vm_t* vm)
                 value_free(&key, vm->ctx.alloc);
             return err;
         }
-        if (is_max ? key.number > best_key : key.number < best_key) {
+        if (is_max ? AS_NUMBER(key) > best_key : AS_NUMBER(key) < best_key) {
             best = x;
-            best_key = key.number;
+            best_key = AS_NUMBER(key);
         }
     }
 
@@ -612,7 +612,7 @@ value_t ntvl_count(const value_t* args, uint8_t n, vm_t* vm)
         value_free(&next.value, vm->ctx.alloc);
     }
 
-    return (value_t){.kind = VALUE_NUMBER, .number = count};
+    return value_number(count);
 }
 
 value_t ntvl_contains(const value_t* args, uint8_t n, vm_t* vm)
@@ -653,7 +653,7 @@ value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
         value_free(&ret, vm->ctx.alloc);
     }
 
-    return (value_t){.kind = VALUE_NUMBER, .number = count};
+    return value_number(count);
 }
 
 value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)
@@ -711,6 +711,6 @@ value_t ntvl_join(const value_t* args, uint8_t n, vm_t* vm)
     }
 
     value_t ret = value_init_str_own(sv_strb_to_str(&b), a);
-    CHECK_OOM(ret.obj.cell);
+    CHECK_OOM(AS_OBJ(ret).cell);
     return ret;
 }

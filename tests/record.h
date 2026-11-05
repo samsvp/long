@@ -9,7 +9,7 @@
 
 static inline value_t sv_test_record_num(double n)
 {
-   return (value_t){ .kind = VALUE_NUMBER, .number = n };
+   return value_number(n);
 }
 
 static inline void sv_test_record_values(sv_testing_t* t)
@@ -21,12 +21,12 @@ static inline void sv_test_record_values(sv_testing_t* t)
    };
    value_t tup = value_init_record(items, 2, &sv_gpa);
    sv_test_run(t, IS_RECORD(tup));
-   sv_test_run(t, s.obj.cell->count == 2);
+   sv_test_run(t, AS_OBJ(s).cell->count == 2);
 
    sv_opt_t(value_t) got = record_get(AS_RECORD(tup), 0);
-   sv_test_run(t, got.is_some && got.value.number == 10);
+   sv_test_run(t, got.is_some && AS_NUMBER(got.value) == 10);
    got = record_get(AS_RECORD(tup), 2);
-   sv_test_run(t, got.is_some && got.value.obj.cell == s.obj.cell);
+   sv_test_run(t, got.is_some && AS_OBJ(got.value).cell == AS_OBJ(s).cell);
    sv_test_run(t, !record_get(AS_RECORD(tup), 1).is_some);
    sv_test_run(t, !record_get(AS_RECORD(tup), 99).is_some);
 
@@ -50,7 +50,7 @@ static inline void sv_test_record_values(sv_testing_t* t)
    value_free(&diff_id, &sv_gpa);
    value_free(&diff_size, &sv_gpa);
    value_free(&tup, &sv_gpa);
-   sv_test_run(t, s.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(s).cell->count == 1);
    value_free(&s, &sv_gpa);
 }
 
@@ -89,7 +89,7 @@ static inline void sv_test_record_update(sv_testing_t* t)
       sv_test_record_num(5), sv_test_record_num(50),
    };
    value_t base = value_init_record(items, 3, &sv_gpa);
-   sv_test_run(t, s.obj.cell->count == 2);
+   sv_test_run(t, AS_OBJ(s).cell->count == 2);
 
    /* The first and last field in one merge; the middle one is carried over. */
    value_t pairs[] = {
@@ -99,14 +99,14 @@ static inline void sv_test_record_update(sv_testing_t* t)
    int64_t missing = 0;
    record_t up = record_update(AS_RECORD(base), pairs, 2, &missing, &sv_gpa);
    sv_test_run(t, up.items != NULL && missing == -1 && up.size == 3);
-   sv_test_run(t, record_get(up, 0).value.number == 11);
-   sv_test_run(t, record_get(up, 2).value.obj.cell == s.obj.cell);
-   sv_test_run(t, record_get(up, 5).value.obj.cell == s2.obj.cell);
-   sv_test_run(t, s.obj.cell->count == 3 && s2.obj.cell->count == 2);
-   sv_test_run(t, record_get(AS_RECORD(base), 0).value.number == 10);
-   sv_test_run(t, record_get(AS_RECORD(base), 5).value.number == 50);
+   sv_test_run(t, AS_NUMBER(record_get(up, 0).value) == 11);
+   sv_test_run(t, AS_OBJ(record_get(up, 2).value).cell == AS_OBJ(s).cell);
+   sv_test_run(t, AS_OBJ(record_get(up, 5).value).cell == AS_OBJ(s2).cell);
+   sv_test_run(t, AS_OBJ(s).cell->count == 3 && AS_OBJ(s2).cell->count == 2);
+   sv_test_run(t, AS_NUMBER(record_get(AS_RECORD(base), 0).value) == 10);
+   sv_test_run(t, AS_NUMBER(record_get(AS_RECORD(base), 5).value) == 50);
    record_deinit(&up, &sv_gpa);
-   sv_test_run(t, s.obj.cell->count == 2 && s2.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(s).cell->count == 2 && AS_OBJ(s2).cell->count == 1);
 
    /* An id between two fields is missing: nothing is built and no borrow is left behind. */
    value_t gap[] = {
@@ -115,11 +115,11 @@ static inline void sv_test_record_update(sv_testing_t* t)
    };
    record_t none = record_update(AS_RECORD(base), gap, 2, &missing, &sv_gpa);
    sv_test_run(t, none.items == NULL && missing == 3);
-   sv_test_run(t, s.obj.cell->count == 2);
+   sv_test_run(t, AS_OBJ(s).cell->count == 2);
 
    value_free(&base, &sv_gpa);
    value_free(&s2, &sv_gpa);
-   sv_test_run(t, s.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(s).cell->count == 1);
    value_free(&s, &sv_gpa);
 }
 

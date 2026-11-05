@@ -18,14 +18,14 @@ static inline void sv_test_map_free_obj(obj_t* o, const sv_allocator_t* a)
 
 static inline value_t sv_test_map_num(double n)
 {
-   return (value_t){ .kind = VALUE_NUMBER, .number = n };
+   return value_number(n);
 }
 
 static inline value_t sv_test_map_obj(const char* text, const sv_allocator_t* a)
 {
    obj_t o = { .kind = OBJ_STR, .str = sv_str_copy(sv_str_init(text), a) };
    sv_rc_t(obj_t) rc = sv_rc_init(obj_t, o, sv_test_map_free_obj, a);
-   return (value_t){ .kind = VALUE_OBJ, .obj = rc };
+   return value_obj(rc);
 }
 
 static inline kv_t sv_test_map_kv(double k, double v)
@@ -36,7 +36,7 @@ static inline kv_t sv_test_map_kv(double k, double v)
 static inline double sv_test_map_get_num(hashmap_t m, double k)
 {
    sv_opt_t(value_t) r = map_get(m, sv_test_map_num(k));
-   return r.is_some ? r.value.number : -1;
+   return r.is_some ? AS_NUMBER(r.value) : -1;
 }
 
 static inline hashmap_t sv_test_map_big(int64_t n, const sv_allocator_t* a)
@@ -181,7 +181,7 @@ static inline void sv_test_map_fork_update(sv_testing_t* t)
    for (int i = 0; i < 2; i++) {
       map_iter_t it = map_iter_init_no_borrow(maps[i]);
       for (sv_opt_t(kv_t) kv = map_iter_next(&it); kv.is_some; kv = map_iter_next(&it))
-         sv_test_run(t, sv_test_map_get_num(maps[i], kv.value.key.number) == kv.value.value.number);
+         sv_test_run(t, sv_test_map_get_num(maps[i], AS_NUMBER(kv.value.key)) == AS_NUMBER(kv.value.value));
    }
 
    map_deinit(&m0, &sv_gpa);
@@ -357,8 +357,8 @@ static inline void sv_test_map_iter(sv_testing_t* t)
    double key_sum = 0;
    double val_sum = 0;
    for (sv_opt_t(kv_t) kv = map_iter_next(&it); kv.is_some; kv = map_iter_next(&it)) {
-      key_sum += kv.value.key.number;
-      val_sum += kv.value.value.number;
+      key_sum += AS_NUMBER(kv.value.key);
+      val_sum += AS_NUMBER(kv.value.value);
       seen++;
    }
    map_iter_deinit(&it, &sv_gpa);
@@ -375,8 +375,8 @@ static inline void sv_test_map_iter(sv_testing_t* t)
    int found_overwritten = 0;
    int found_deleted = 0;
    for (sv_opt_t(kv_t) kv = map_iter_next(&it2); kv.is_some; kv = map_iter_next(&it2)) {
-      if (kv.value.key.number == 5) found_overwritten = kv.value.value.number == 200;
-      if (kv.value.key.number == 7) found_deleted = 1;
+      if (AS_NUMBER(kv.value.key) == 5) found_overwritten = AS_NUMBER(kv.value.value) == 200;
+      if (AS_NUMBER(kv.value.key) == 7) found_deleted = 1;
       seen++;
    }
    map_iter_deinit(&it2, &sv_gpa);
@@ -395,28 +395,28 @@ static inline void sv_test_map_values(sv_testing_t* t)
 
    value_t k = sv_test_map_obj("key", &sv_gpa);
    value_t v = sv_test_map_obj("shared", &sv_gpa);
-   sv_test_run(t, v.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(v).cell->count == 1);
 
    value_t kv[] = { k, v };
    hashmap_t m = map_init(kv, 2, &sv_gpa);
-   sv_test_run(t, k.obj.cell->count == 2);
-   sv_test_run(t, v.obj.cell->count == 2);
+   sv_test_run(t, AS_OBJ(k).cell->count == 2);
+   sv_test_run(t, AS_OBJ(v).cell->count == 2);
 
    sv_opt_t(value_t) got = map_get(m, k);
-   sv_test_run(t, got.is_some && got.value.obj.cell == v.obj.cell);
-   sv_test_run(t, v.obj.cell->count == 2);
+   sv_test_run(t, got.is_some && AS_OBJ(got.value).cell == AS_OBJ(v).cell);
+   sv_test_run(t, AS_OBJ(v).cell->count == 2);
 
    hashmap_t m2 = map_put(m, (kv_t){ .key = k, .value = sv_test_map_num(0) }, &sv_gpa);
-   sv_test_run(t, map_get(m2, k).value.kind == VALUE_NUMBER);
-   sv_test_run(t, map_get(m, k).value.kind == VALUE_OBJ);
+   sv_test_run(t, VALUE_KIND(map_get(m2, k).value) == VALUE_NUMBER);
+   sv_test_run(t, VALUE_KIND(map_get(m, k).value) == VALUE_OBJ);
 
    map_deinit(&m2, &sv_gpa);
    map_deinit(&m, &sv_gpa);
-   sv_test_run(t, k.obj.cell->count == 1);
-   sv_test_run(t, v.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(k).cell->count == 1);
+   sv_test_run(t, AS_OBJ(v).cell->count == 1);
    sv_test_run(t, sv_test_map_obj_frees == 0);
-   sv_rc_deinit(&k.obj, &sv_gpa);
-   sv_rc_deinit(&v.obj, &sv_gpa);
+   value_free(&k, &sv_gpa);
+   value_free(&v, &sv_gpa);
    sv_test_run(t, sv_test_map_obj_frees == 2);
 }
 
@@ -466,9 +466,9 @@ static inline void sv_test_map_oom(sv_testing_t* t)
          map_deinit(&updated, &countdown);
    }
    map_deinit(&upd, &sv_gpa);
-   sv_test_run(t, v.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(v).cell->count == 1);
    sv_test_run(t, sv_test_map_obj_frees == 0);
-   sv_rc_deinit(&v.obj, &sv_gpa);
+   value_free(&v, &sv_gpa);
    sv_test_run(t, sv_test_map_obj_frees == 1);
 }
 
@@ -489,12 +489,12 @@ static inline void sv_test_map_transient(sv_testing_t* t)
 
    value_t k2 = sv_test_map_obj("ke2", &sv_gpa);
    sv_opt_t(value_t) got = thm_get(tm, k2);
-   sv_test_run(t, got.is_some && got.value.number == 20);
+   sv_test_run(t, got.is_some && AS_NUMBER(got.value) == 20);
 
    kv_t upd = { .key = k2, .value = sv_test_map_num(99) };
    sv_test_run(t, thm_put(&tm, upd, &sv_gpa));
    got = thm_get(tm, k2);
-   sv_test_run(t, got.is_some && got.value.number == 99);
+   sv_test_run(t, got.is_some && AS_NUMBER(got.value) == 99);
    sv_test_run(t, thm_count(tm) == 3);
 
    sv_test_run(t, thm_delete(&tm, k2, &sv_gpa));
@@ -505,7 +505,7 @@ static inline void sv_test_map_transient(sv_testing_t* t)
    kv_t re = { .key = k2, .value = sv_test_map_num(7) };
    sv_test_run(t, thm_put(&tm, re, &sv_gpa));
    got = thm_get(tm, k2);
-   sv_test_run(t, got.is_some && got.value.number == 7);
+   sv_test_run(t, got.is_some && AS_NUMBER(got.value) == 7);
    sv_test_run(t, thm_count(tm) == 3);
    value_free(&k2, &sv_gpa);
 
@@ -514,7 +514,7 @@ static inline void sv_test_map_transient(sv_testing_t* t)
    sv_test_run(t, thm_count(tm) == 103);
    for (double k = 0; k < 100; k++) {
       sv_opt_t(value_t) v = thm_get(tm, sv_test_map_num(1000 + k));
-      sv_test_run(t, v.is_some && v.value.number == k);
+      sv_test_run(t, v.is_some && AS_NUMBER(v.value) == k);
    }
 
    hashmap_t persisted = transient_to_map(&tm, &sv_gpa);

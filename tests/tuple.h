@@ -9,7 +9,7 @@
 
 static inline value_t sv_test_tuple_num(double n)
 {
-   return (value_t){ .kind = VALUE_NUMBER, .number = n };
+   return value_number(n);
 }
 
 static inline void sv_test_tuple(sv_testing_t* t)
@@ -18,15 +18,15 @@ static inline void sv_test_tuple(sv_testing_t* t)
    value_t items[] = { sv_test_tuple_num(1), s, sv_test_tuple_num(3) };
    value_t tup = value_init_tuple(items, 3, &sv_gpa);
    sv_test_run(t, IS_TUPLE(tup));
-   sv_test_run(t, s.obj.cell->count == 2);
+   sv_test_run(t, AS_OBJ(s).cell->count == 2);
 
    sv_opt_t(value_t) got = tuple_get(AS_TUPLE(tup), 0);
-   sv_test_run(t, got.is_some && got.value.number == 1);
+   sv_test_run(t, got.is_some && AS_NUMBER(got.value) == 1);
    got = tuple_get(AS_TUPLE(tup), 1);
-   sv_test_run(t, got.is_some && got.value.obj.cell == s.obj.cell);
+   sv_test_run(t, got.is_some && AS_OBJ(got.value).cell == AS_OBJ(s).cell);
    sv_test_run(t, !tuple_get(AS_TUPLE(tup), 3).is_some);
    got = tuple_get(AS_TUPLE(tup), -1);
-   sv_test_run(t, got.is_some && got.value.number == 3);
+   sv_test_run(t, got.is_some && AS_NUMBER(got.value) == 3);
    sv_test_run(t, !tuple_get(AS_TUPLE(tup), -4).is_some);
 
    value_t same = value_init_tuple(items, 3, &sv_gpa);
@@ -55,7 +55,7 @@ static inline void sv_test_tuple(sv_testing_t* t)
    value_free(&swapped, &sv_gpa);
    value_free(&same, &sv_gpa);
    value_free(&tup, &sv_gpa);
-   sv_test_run(t, s.obj.cell->count == 1);
+   sv_test_run(t, AS_OBJ(s).cell->count == 1);
    value_free(&s, &sv_gpa);
 }
 

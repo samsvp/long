@@ -51,14 +51,17 @@ sv_rc_cell_def(obj_t);
 
 static inline void value_free(value_t* v, const sv_allocator_t* a)
 {
-    if (v->kind == VALUE_OBJ)
-        sv_rc_deinit(&v->obj, a);
+    if (IS_OBJ(*v)) {
+        sv_rc_t(obj_t) rc = AS_OBJ(*v);
+        sv_rc_deinit(&rc, a);
+        *v = value_obj(rc);
+    }
 }
 
 static inline value_t value_borrow(value_t v)
 {
-    if (v.kind == VALUE_OBJ)
-        v.obj = sv_rc_borrow(v.obj);
+    if (IS_OBJ(v))
+        (void)sv_rc_borrow(AS_OBJ(v));
     return v;
 }
 

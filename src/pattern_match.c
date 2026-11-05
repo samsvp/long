@@ -772,7 +772,7 @@ static value_t atom_key(sv_str_t name, int64_t line, ctx_t* ctx)
         atom_keys[atom_keys_used++] = name;
     }
 
-    return (value_t){ .kind = VALUE_ATOM, .number = (double)i };
+    return value_atom((double)i);
 }
 
 /**
@@ -781,7 +781,7 @@ static value_t atom_key(sv_str_t name, int64_t line, ctx_t* ctx)
 static value_t literal_to_value(literal_t l, int64_t line, ctx_t* ctx, const sv_allocator_t* a)
 {
     switch (l.kind) {
-        case LITERAL_NUMBER: return (value_t){ .kind = VALUE_NUMBER, .number = l.number };
+        case LITERAL_NUMBER: return value_number(l.number);
         case LITERAL_NIL: return value_nil;
         case LITERAL_FALSE: return value_false;
         case LITERAL_TRUE: return value_true;
@@ -836,7 +836,7 @@ static sexpr_t compile_kv_container(cons_t match, int* start_i, sexpr_t u, patte
         for (int j = 1; j < record_cond.size - 1; j += 2) {
             value_t key = literal_to_value(record_cond.arr[j].atom.literal, match.arr[0].atom.line, ctx, a);
 
-            value_t index = { .kind = VALUE_NUMBER, .number = j + 1 };
+            value_t index = value_number(j + 1);
             thm_put(&map, (kv_t){ .key = key, .value = index }, a);
         }
         max_size += thm_count(map);
@@ -885,7 +885,7 @@ static sexpr_t compile_kv_container(cons_t match, int* start_i, sexpr_t u, patte
             APPEND_CAP(&get_field, get_atom);
             APPEND_CAP(&get_field, u);
             // the field name token
-            APPEND_CAP(&get_field, GET_KEY(i, kv.value.value.number - 1));
+            APPEND_CAP(&get_field, GET_KEY(i, AS_NUMBER(kv.value.value) - 1));
 
             // set as eql
             cons_t u_eql = cons_init(3, a);
@@ -898,13 +898,13 @@ static sexpr_t compile_kv_container(cons_t match, int* start_i, sexpr_t u, patte
                 sv_opt_t(value_t) v = thm_get(map_vec.arr[j], kv.value.key);
 
                 if (v.is_some) {
-                    sexpr_t pat = GET_KEY(j, v.value.number);
+                    sexpr_t pat = GET_KEY(j, AS_NUMBER(v.value));
                     if (pattern_class_of(pat) == PAT_VAR) {
                         // need to check if the variable actually exists
                         cons_t exists = cons_init(3, a);
                         APPEND_CAP(&exists, exists_atom);
                         APPEND_CAP(&exists, u);
-                        APPEND_CAP(&exists, GET_KEY(i, kv.value.value.number - 1));
+                        APPEND_CAP(&exists, GET_KEY(i, AS_NUMBER(kv.value.value) - 1));
                         sexpr_t body = GET_BODY(lower_match, 2 + j);
                         sexpr_t when_cond = patch_when(body, cons_sexpr(exists), a);
                         GET_BODY(lower_match, 2 + j) = when_cond;

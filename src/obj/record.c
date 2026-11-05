@@ -14,7 +14,7 @@ record_t record_init(const value_t* values, uint8_t size, const sv_allocator_t* 
         return (record_t){0};
 
     for (uint16_t i = 0; i < 2 * (uint16_t) size; i += 2)
-        items[i / 2] = (record_item_t){ .id = (uint32_t)values[i].number, .value = value_borrow(values[i + 1]) };
+        items[i / 2] = (record_item_t){ .id = (uint32_t)AS_NUMBER(values[i]), .value = value_borrow(values[i + 1]) };
 
     qsort(items, size, sizeof(record_item_t), record_cmp);
     return (record_t){ .items = items, .size = size };
@@ -71,7 +71,7 @@ record_t record_update(record_t base, const value_t* pairs, uint8_t n, int64_t* 
 
     uint8_t at = 0;
     for (uint16_t i = 0; i < 2 * (uint16_t)n; i += 2) {
-        uint32_t id = (uint32_t)pairs[i].number;
+        uint32_t id = (uint32_t)AS_NUMBER(pairs[i]);
 
         // the fields below this one are kept, then the field itself must be next
         for (; at < base.size && base.items[at].id < id; at++)

@@ -147,7 +147,7 @@ value_t ntv_sprintf(const value_t* values, uint8_t n, vm_t* vm)
         return ret;
     }
     ret = value_init_str_own(sv_strb_to_str(&b), vm->ctx.alloc);
-    if (ret.obj.cell == NULL)
+    if (AS_OBJ(ret).cell == NULL)
         return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
     return ret;
 }
@@ -181,7 +181,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
 
     sv_str_t str = sv_strb_to_str(&b);
     ret = value_init_str(str, vm->ctx.alloc);
-    if (ret.obj.cell == NULL)
+    if (AS_OBJ(ret).cell == NULL)
         value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
 
 ret:
@@ -198,20 +198,20 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
     if (!IS_LIST(v) && !IS_STR(v) && !IS_MAP(v) && !IS_ITER(v))
         return bad_arg_type_error(v, VALUE_OBJ, OBJ_ITER, &vm->ctx);
 
-    value_t ret = { .kind = VALUE_NUMBER, .number = 0 };
+    double count = 0;
 
-    switch (v.obj.cell->value.kind) {
+    switch (AS_OBJ(v).cell->value.kind) {
     case OBJ_STR:
-        ret.number = str_count(AS_STR(v));
+        count = str_count(AS_STR(v));
         break;
     case OBJ_LIST:
-        ret.number = ll_count(AS_LIST(v));
+        count = ll_count(AS_LIST(v));
         break;
     case OBJ_MAP:
-        ret.number = map_count(AS_MAP(v));
+        count = map_count(AS_MAP(v));
         break;
     case OBJ_ITER:
-        ret.number = (double)iterable_len(&AS_ITER(v));
+        count = (double)iterable_len(&AS_ITER(v));
         break;
     case OBJ_ACTOR:
     case OBJ_TUPLE:
@@ -224,7 +224,7 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
         return value_nil;
     }
 
-    return ret;
+    return value_number(count);
 }
 
 
@@ -237,18 +237,18 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
         return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, &vm->ctx);      \
     if (!IS_NUMBER(max))                                                       \
         return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, &vm->ctx);      \
-    if (min.number > max.number)                                               \
+    if (AS_NUMBER(min) > AS_NUMBER(max))                                       \
         return value_nil;                                                      \
-    double range = fabs(max.number - min.number);                              \
+    double range = fabs(AS_NUMBER(max) - AS_NUMBER(min));                      \
     double res = (formula);                                                    \
-    return (value_t){ .number = res, .kind = VALUE_NUMBER };                   \
+    return value_number(res);                                                  \
 } while (0)
 
 value_t ntv_randi(const value_t* args, uint8_t n, vm_t* vm)
-{ RAND(rand() % (int)range + (int)min.number); }
+{ RAND(rand() % (int)range + (int)AS_NUMBER(min)); }
 
 value_t ntv_randf(const value_t* args, uint8_t n, vm_t* vm)
-{ RAND((double)rand()/(double)(RAND_MAX/range) + min.number); }
+{ RAND((double)rand()/(double)(RAND_MAX/range) + AS_NUMBER(min)); }
 
 value_t ntv_int(const value_t* args, uint8_t n, vm_t* vm)
 {
@@ -256,9 +256,9 @@ value_t ntv_int(const value_t* args, uint8_t n, vm_t* vm)
 
     value_t x = args[0];
     if (IS_NUMBER(x))
-        return (value_t){ .kind = VALUE_NUMBER, .number = floor(AS_NUMBER(x)) };
+        return value_number(floor(AS_NUMBER(x)));
     if (IS_ATOM(x))
-        return (value_t){ .kind = VALUE_NUMBER, .number = x.number };
+        return value_number(AS_ATOM(x));
     if (IS_STR(x)) {
         sv_str_t s = AS_STR(x);
         const char* c = sv_str_to_c_str(s, vm->ctx.alloc);
@@ -267,7 +267,7 @@ value_t ntv_int(const value_t* args, uint8_t n, vm_t* vm)
         if (c == end || end[0] != '\0') {
             return value_nil;
         }
-        return (value_t){ .kind = VALUE_NUMBER, .number = (double)d };
+        return value_number((double)d);
     }
     return value_nil;
 }

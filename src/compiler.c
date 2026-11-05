@@ -724,7 +724,7 @@ static void compile_record(compiler_t* c, const sexpr_t* args, int64_t n, int64_
             compiler_error_name(ctx, C_ERR_REDEFINED, line, "Record field", fields[i].name);
 
     for (int64_t i = 0; i < n_fields; i++) {
-        add_const(c, ctx, (value_t){ .kind = VALUE_NUMBER, .number = (double)fields[i].id }, line);
+        add_const(c, ctx, value_number((double)fields[i].id), line);
         compile_sexpr(c, *fields[i].value, false, ctx);
     }
     if (base == NULL) {
@@ -898,7 +898,7 @@ static void compile_if(compiler_t* c, const sexpr_t* args, int64_t n, int64_t li
     if (n == 3)
         compile_sexpr(c, args[2], is_tail, ctx);
     else
-        add_const(c, ctx, (value_t){ .kind = VALUE_NIL }, line);
+        add_const(c, ctx, value_nil, line);
 
     patch_jump(c, ctx, j2, line);
     deinit_scope(c, ctx);
@@ -1341,7 +1341,7 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
     emit_wide(c, ctx, OP_ACTOR_VTABLE, (uint32_t)(c->actor_vtables.size - 1), line);
 
     value_t path_value = value_init_str(sv_str_init(path), &ctx->alloc);
-    if (path_value.obj.cell == NULL)
+    if (AS_OBJ(path_value).cell == NULL)
         compiler_oom(ctx, line);
     module_put(&c->module_scope->var_to_modules, name, path_value, line, ctx);
 
@@ -1549,26 +1549,26 @@ static void compile_literal(compiler_t* c, literal_t lit, int64_t line, ctx_t* c
 {
     switch (lit.kind) {
         case LITERAL_NUMBER:
-            add_const(c, ctx, (value_t){ .kind = VALUE_NUMBER, .number = lit.number }, line);
+            add_const(c, ctx, value_number(lit.number), line);
             break;
         case LITERAL_ATOM: {
             bool existed = false;
             uint32_t id = names_add(c->atoms, lit.str, &existed, ctx, &ctx->alloc);
-            add_const(c, ctx, (value_t){ .kind = VALUE_ATOM, .number = (double)id }, line);
+            add_const(c, ctx, value_atom((double)id), line);
             break;
         }
         case LITERAL_TRUE:
-            add_const(c, ctx, (value_t){ .kind = VALUE_BOOL, .boolean = true }, line);
+            add_const(c, ctx, value_bool(true), line);
             break;
         case LITERAL_FALSE:
-            add_const(c, ctx, (value_t){ .kind = VALUE_BOOL, .boolean = false }, line);
+            add_const(c, ctx, value_bool(false), line);
             break;
         case LITERAL_NIL:
-            add_const(c, ctx, (value_t){ .kind = VALUE_NIL }, line);
+            add_const(c, ctx, value_nil, line);
             break;
         case LITERAL_STRING: {
             value_t s = value_init_str(lit.str, &ctx->alloc);
-            if (s.obj.cell == NULL)
+            if (AS_OBJ(s).cell == NULL)
                 compiler_oom(ctx, line);
             add_const(c, ctx, s, line);
             break;
@@ -1593,7 +1593,7 @@ static void compile_atom(compiler_t* c, token_t token, ctx_t* ctx)
 static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, int64_t line, ctx_t* ctx)
 {
     value_t k = value_init_str(key, &ctx->alloc);
-    bool ok = k.obj.cell != NULL && thm_put(t, (kv_t){ .key = k, .value = value }, &ctx->alloc);
+    bool ok = AS_OBJ(k).cell != NULL && thm_put(t, (kv_t){ .key = k, .value = value }, &ctx->alloc);
     value_free(&k, &ctx->alloc);
     value_free(&value, &ctx->alloc);
     if (!ok)
@@ -1641,7 +1641,7 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
     }
 
     value_t path_value = value_init_str(full_path, &ctx->alloc);
-    if (path_value.obj.cell == NULL)
+    if (AS_OBJ(path_value).cell == NULL)
         compiler_oom(ctx, line);
     module_put(&c->module_scope->var_to_modules, name, path_value, line, ctx);
     return is_new;
@@ -1743,7 +1743,7 @@ static void add_native_fn(compiler_t* c, native_fn_t fn, sv_str_t prefix, ctx_t*
 {
     globals_add(&c->globals, sv_str_init(fn.name), prefix, 0, ctx, c->scratch);
     value_t fn_val = value_init_native(fn, &ctx->alloc);
-    if (fn_val.obj.cell == NULL)
+    if (AS_OBJ(fn_val).cell == NULL)
         compiler_oom(ctx, 0);
     int success = 0;
     sv_vec_push(&c->global_values, fn_val, &success, &ctx->alloc);

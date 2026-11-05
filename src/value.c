@@ -10,7 +10,7 @@
 #include "obj/user_value.h"
 #include "vm.h"
 
-#define ERR_VALUE (value_t){ .kind = VALUE_OBJ }
+#define ERR_VALUE value_obj((sv_rc_t(obj_t)){ 0 })
 
 void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
 {
@@ -21,10 +21,10 @@ void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
 
 bool value_is_truthy(value_t v)
 {
-    switch (v.kind) {
+    switch (VALUE_KIND(v)) {
         case VALUE_UNDEFINED:
         case VALUE_NIL: return false;
-        case VALUE_BOOL: return v.boolean;
+        case VALUE_BOOL: return AS_BOOL(v);
         case VALUE_C:
         case VALUE_NUMBER:
         case VALUE_ATOM:
@@ -64,20 +64,20 @@ static bool map_eql(hashmap_t x, hashmap_t y)
 
 bool value_eql(value_t x, value_t y)
 {
-    if (x.kind != y.kind)
+    if (VALUE_KIND(x) != VALUE_KIND(y))
         return false;
-    switch (x.kind) {
-        case VALUE_NUMBER:
-        case VALUE_ATOM: return AS_NUMBER(x) == AS_NUMBER(y);
+    switch (VALUE_KIND(x)) {
+        case VALUE_NUMBER: return AS_NUMBER(x) == AS_NUMBER(y);
+        case VALUE_ATOM: return AS_ATOM(x) == AS_ATOM(y);
         case VALUE_UNDEFINED: return false;
         case VALUE_NIL: return true;
         case VALUE_C: return AS_C(x) == AS_C(y);
         case VALUE_BOOL: return AS_BOOL(x) == AS_BOOL(y);
         case VALUE_OBJ: {
-            if (x.obj.cell == y.obj.cell)
+            if (AS_OBJ(x).cell == AS_OBJ(y).cell)
                 return true;
-            const obj_t* ox = &x.obj.cell->value;
-            const obj_t* oy = &y.obj.cell->value;
+            const obj_t* ox = &AS_OBJ(x).cell->value;
+            const obj_t* oy = &AS_OBJ(y).cell->value;
             if (ox->kind != oy->kind)
                 return false;
             switch (ox->kind) {
@@ -124,7 +124,7 @@ static value_t obj_wrap(obj_t o, const sv_allocator_t* a)
     sv_rc_t(obj_t) rc = sv_rc_init(obj_t, o, obj_free, a);
     if (rc.cell == NULL)
         return ERR_VALUE;
-    return (value_t){ .kind = VALUE_OBJ, .obj = rc };
+    return value_obj(rc);
 }
 
 value_t value_init_list(const value_t* vs, int64_t len, const sv_allocator_t* a)
@@ -134,7 +134,7 @@ value_t value_init_list(const value_t* vs, int64_t len, const sv_allocator_t* a)
         return ERR_VALUE;
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_LIST, .list = list }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         ll_deinit(&list, a);
     return v;
 }
@@ -146,7 +146,7 @@ value_t value_init_list_filter(const value_t* vs, int64_t len, const sv_allocato
         return ERR_VALUE;
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_LIST, .list = list }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         ll_deinit(&list, a);
     return v;
 }
@@ -187,7 +187,7 @@ value_t value_init_iter(value_t from, const sv_allocator_t* a)
     if (iter.self == NULL)
         return ERR_VALUE;
     value_t v = obj_wrap((obj_t){ .kind = OBJ_ITER, .iter = iter }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         iter_deinit(&iter, a);
     return v;
 }
@@ -205,7 +205,7 @@ value_t value_init_closure(fn_t* function, const value_t* ups, int64_t n, const 
     }
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_CLOSURE, .closure = cls }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         cls_deinit(&cls, a);
     return v;
 }
@@ -215,7 +215,7 @@ value_t value_init_closure_member(sv_rc_t(closure_group_t) group, int64_t index,
     value_t v = obj_wrap(
         (obj_t){ .kind = OBJ_CLOSURE_MEMBER, .closure_member = { .group = group, .index = (size_t)index } },
         a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         sv_rc_deinit(&group, a);
     return v;
 }
@@ -223,7 +223,7 @@ value_t value_init_closure_member(sv_rc_t(closure_group_t) group, int64_t index,
 value_t value_init_str_own(sv_str_t s, const sv_allocator_t* a)
 {
     value_t v = obj_wrap((obj_t){ .kind = OBJ_STR, .str = s }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         sv_str_deinit(&s, a);
     return v;
 }
@@ -243,7 +243,7 @@ value_t value_init_map(const value_t* vs, int64_t n_pairs, const sv_allocator_t*
         return ERR_VALUE;
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_MAP, .map = map }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         map_deinit(&map, a);
     return v;
 }
@@ -251,7 +251,7 @@ value_t value_init_map(const value_t* vs, int64_t n_pairs, const sv_allocator_t*
 value_t value_init_record(const value_t* vs, uint8_t n, const sv_allocator_t* a)
 {
     value_t v = obj_wrap((obj_t){ .kind = OBJ_RECORD, .record = {0} }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         return ERR_VALUE;
 
     record_t record = record_init(vs, n, a);
@@ -260,14 +260,14 @@ value_t value_init_record(const value_t* vs, uint8_t n, const sv_allocator_t* a)
         return ERR_VALUE;
     }
 
-    v.obj.cell->value.record = record;
+    AS_OBJ(v).cell->value.record = record;
     return v;
 }
 
 value_t value_init_tuple(const value_t* vs, uint8_t n, const sv_allocator_t* a)
 {
     value_t v = obj_wrap((obj_t){ .kind = OBJ_TUPLE, .tuple = {0} }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         return ERR_VALUE;
 
     tuple_t tuple = tuple_init(vs, n, a);
@@ -276,7 +276,7 @@ value_t value_init_tuple(const value_t* vs, uint8_t n, const sv_allocator_t* a)
         return ERR_VALUE;
     }
 
-    v.obj.cell->value.tuple = tuple;
+    AS_OBJ(v).cell->value.tuple = tuple;
     return v;
 }
 
@@ -310,22 +310,22 @@ const char* value_kind_str(value_kind v_kind, obj_kind o_kind)
 
 const char* value_type_name(value_t v)
 {
-    return value_kind_str(v.kind, v.kind == VALUE_OBJ ? v.obj.cell->value.kind : 0);
+    return value_kind_str(VALUE_KIND(v), VALUE_KIND(v) == VALUE_OBJ ? AS_OBJ(v).cell->value.kind : 0);
 }
 
 bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
 {
     const sv_allocator_t* a = ctx->alloc;
 #define CHECK(expr) if (!(expr)) return false
-    switch (v.kind) {
+    switch (VALUE_KIND(v)) {
         case VALUE_NIL: return sv_strb_add(b, "nil", 3, a) >= 0;
         case VALUE_UNDEFINED: return sv_strb_add(b, "undefined", 3, a) >= 0;
         case VALUE_C: return sv_strb_add(b, "c val", 5, a) >= 0;
         case VALUE_BOOL:
-            return v.boolean ? sv_strb_add(b, "true", 4, a) >= 0 : sv_strb_add(b, "false", 5, a) >= 0;
+            return AS_BOOL(v) ? sv_strb_add(b, "true", 4, a) >= 0 : sv_strb_add(b, "false", 5, a) >= 0;
         case VALUE_NUMBER: {
             char buf[32];
-            int n = snprintf(buf, sizeof(buf), "%g", v.number);
+            int n = snprintf(buf, sizeof(buf), "%g", AS_NUMBER(v));
             return sv_strb_add(b, buf, n, a) >= 0;
         }
         case VALUE_ATOM: {
@@ -336,12 +336,12 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
         case VALUE_OBJ: break;
     }
 
-    switch (v.obj.cell->value.kind) {
+    switch (AS_OBJ(v).cell->value.kind) {
         case OBJ_STR:
-            return sv_strb_add(b, v.obj.cell->value.str.chars, v.obj.cell->value.str.size, a) >= 0;
+            return sv_strb_add(b, AS_OBJ(v).cell->value.str.chars, AS_OBJ(v).cell->value.str.size, a) >= 0;
         case OBJ_LIST: {
             CHECK(sv_strb_add_char(b, '[', a) >= 0);
-            ll_iter_t iter = ll_iter_init_no_borrow(v.obj.cell->value.list);
+            ll_iter_t iter = ll_iter_init_no_borrow(AS_OBJ(v).cell->value.list);
             bool first = true;
             for (sv_opt_t(value_t) e = ll_iter_next(&iter); e.is_some; e = ll_iter_next(&iter)) {
                 if ((!first && sv_strb_add(b, ", ", 2, a) < 0) || !value_write(e.value, b, ctx)) {
@@ -354,7 +354,7 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
         }
         case OBJ_MAP: {
             CHECK(sv_strb_add(b, "%{", 2, a) >= 0);
-            map_iter_t it = map_iter_init_no_borrow(v.obj.cell->value.map);
+            map_iter_t it = map_iter_init_no_borrow(AS_OBJ(v).cell->value.map);
             bool first = true;
             for (sv_opt_t(kv_t) kv = map_iter_next(&it); kv.is_some; kv = map_iter_next(&it)) {
                 if ((!first && sv_strb_add(b, ", ", 2, a) < 0)
@@ -394,15 +394,15 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
             return sv_strb_add(b, name, (int64_t)strlen(name), a) >= 0;
         }
         case OBJ_CLOSURE: {
-            sv_str_t name = cls_get_vm(v.obj.cell->value.closure)->name;
+            sv_str_t name = cls_get_vm(AS_OBJ(v).cell->value.closure)->name;
             return sv_strb_add(b, name.chars, name.size, a) >= 0;
         }
         case OBJ_CLOSURE_MEMBER: {
-            sv_str_t name = clsm_get_vm(v.obj.cell->value.closure_member)->name;
+            sv_str_t name = clsm_get_vm(AS_OBJ(v).cell->value.closure_member)->name;
             return sv_strb_add(b, name.chars, name.size, a) >= 0;
         }
         case OBJ_NATIVE_FN: {
-            const char* name = v.obj.cell->value.fn.name;
+            const char* name = AS_OBJ(v).cell->value.fn.name;
             return sv_strb_add(b, name, strlen(name), a) >= 0;
         }
         case OBJ_RECORD: {
@@ -423,7 +423,7 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
             return sv_strb_add(b, "}", 1, a) >= 0;
         }
         case OBJ_USER_VALUE: {
-            sv_str_t s = uv_string(v.obj.cell->value.uservalue, ctx);
+            sv_str_t s = uv_string(AS_OBJ(v).cell->value.uservalue, ctx);
             CHECK(s.chars != NULL);
             int n = sv_strb_add(b, s.chars, s.size, a);
             sv_str_deinit(&s, ctx->alloc);
@@ -459,7 +459,7 @@ value_t value_init_user_value(void* ptr, const user_value_vtable_t* vtable,
     };
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_USER_VALUE, .uservalue = uv }, a);
-    if (v.obj.cell == NULL)
+    if (AS_OBJ(v).cell == NULL)
         return ERR_VALUE;
     return v;
 }

@@ -5,10 +5,10 @@
 /* Initializes the iterator in storage, borrowing the value when asked to. */
 static iterable_t init_in(value_t from, iter_storage_t* s, bool borrow)
 {
-    if (from.kind != VALUE_OBJ)
+    if (VALUE_KIND(from) != VALUE_OBJ)
         return (iterable_t){0};
 
-    switch (from.obj.cell->value.kind) {
+    switch (AS_OBJ(from).cell->value.kind) {
         case OBJ_LIST:
             s->list = borrow ? ll_iter_init(AS_LIST(from)) : ll_iter_init_no_borrow(AS_LIST(from));
             return ll_iterable_init(&s->list);

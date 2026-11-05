@@ -8,14 +8,14 @@ sv_opt_t(uint32_t) names_get(transient_hashmap_t names, sv_str_t id, const sv_al
         return sv_opt_none_t(uint32_t);
 
     value_t key = value_init_str(id, a);
-    if (key.obj.cell == NULL)
+    if (AS_OBJ(key).cell == NULL)
         return sv_opt_none_t(uint32_t);
 
     sv_opt_t(value_t) v = thm_get(names, key);
     value_free(&key, a);
     if (!v.is_some)
         return sv_opt_none_t(uint32_t);
-    return sv_opt_some_t(uint32_t, (uint32_t)v.value.number);
+    return sv_opt_some_t(uint32_t, (uint32_t)AS_NUMBER(v.value));
 }
 
 void check_limit(ctx_t* ctx, int64_t n, uint32_t max, const char* what, int64_t line)
@@ -53,11 +53,11 @@ uint32_t names_add(transient_hashmap_t* names, sv_str_t id, bool* existed, ctx_t
         return found.value;
 
     value_t key = value_init_str(id, a);
-    if (key.obj.cell == NULL)
+    if (AS_OBJ(key).cell == NULL)
         longjmp(*ctx->on_error, 1);
 
     uint32_t next = (uint32_t)thm_count(*names);
-    kv_t kv = { .key = key, .value = { .kind = VALUE_NUMBER, .number = (double)next } };
+    kv_t kv = { .key = key, .value = value_number((double)next) };
     bool ok = thm_put(names, kv, a);
     value_free(&key, a);
     if (!ok)
@@ -81,7 +81,7 @@ const char** names_arr_init(transient_hashmap_t names, const sv_allocator_t* a)
             names_arr_deinit(arr, (uint32_t)n, a);
             return NULL;
         }
-        arr[(int64_t)kv.value.value.number] = copy;
+        arr[(int64_t)AS_NUMBER(kv.value.value)] = copy;
     }
     return arr;
 }

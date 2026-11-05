@@ -3,7 +3,7 @@
 
 #include "../common.h"
 
-#define NUMBER(x) (value_t){ .kind = VALUE_NUMBER, .number = (x) }
+#define NUMBER(x) value_number((x))
 
 #define CHECK_NUMBER(v) do {                                                   \
     if (!IS_NUMBER(v))                                                         \

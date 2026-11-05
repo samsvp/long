@@ -44,13 +44,13 @@ sv_opt_t(value_t) tuple_get(tuple_t tuple, int64_t i)
 
 tuple_iter_t tuple_iter_init_no_borrow(value_t v)
 {
-    return (tuple_iter_t){ .root = {0}, .tuple = v.obj.cell->value.tuple, .i = 0 };
+    return (tuple_iter_t){ .root = {0}, .tuple = AS_OBJ(v).cell->value.tuple, .i = 0 };
 }
 
 tuple_iter_t tuple_iter_init(value_t v)
 {
     tuple_iter_t it = tuple_iter_init_no_borrow(v);
-    it.root = sv_rc_borrow(v.obj);
+    it.root = sv_rc_borrow(AS_OBJ(v));
     return it;
 }
 

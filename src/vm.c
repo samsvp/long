@@ -21,7 +21,7 @@ static inline void arr_remove_n(value_arr* arr, int64_t n, const sv_allocator_t*
 
 static bool is_integer(value_t v)
 {
-    return IS_NUMBER(v) && v.number == (double)(int64_t)v.number;
+    return IS_NUMBER(v) && AS_NUMBER(v) == (double)(int64_t)AS_NUMBER(v);
 }
 
 vm_t vm_init(fn_t fn, int64_t max_call_frames, globals_t globals_names_to_index, const sv_allocator_t* a)
@@ -77,7 +77,7 @@ sv_opt_t(uint32_t) vm_get_record_idx(vm_t vm, sv_str_t s)
     obj_t str_obj = { .kind = OBJ_STR, .str = s };
     sv_rc_cell_t(obj_t) cell = { .value = str_obj };
     sv_rc_t(obj_t) obj = { .cell =  &cell };
-    value_t v = { .kind = VALUE_OBJ, .obj = obj };
+    value_t v = value_obj(obj);
     sv_opt_t(value_t) index_val = map_get(vm.ctx.record_fields, v);
     sv_opt_t(uint32_t) index = index_val.is_some ?
         sv_opt_some_t(uint32_t, (uint32_t)AS_NUMBER(index_val.value))
@@ -256,7 +256,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 
 #define IS_KIND(test) {                                                                                       \
     value_t v = sv_vec_pop(stack);                                                                            \
-    value_t res = { .kind = VALUE_BOOL, .boolean = (test) };                                                  \
+    value_t res = value_bool((test));                                                                         \
     value_free(&v, a);                                                                                        \
     TRY_PUSH_STACK(res);                                                                                      \
     DISPATCH(); }
@@ -264,7 +264,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 #define IS_SIZED(is, as, field) {                                                                             \
     uint8_t want = READ_BYTE();                                                                               \
     value_t v = sv_vec_pop(stack);                                                                            \
-    value_t res = { .kind = VALUE_BOOL, .boolean = is(v) && as(v).field == want };                            \
+    value_t res = value_bool(is(v) && as(v).field == want);                                                   \
     value_free(&v, a);                                                                                        \
     TRY_PUSH_STACK(res);                                                                                      \
     DISPATCH(); }
@@ -289,13 +289,13 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
         RAISE_MATCH_FAILED();                                                                                 \
     DISPATCH(); }
 
-#define NUM_BIN_OP(op, res_kind, res_field) {                                                                 \
+#define NUM_BIN_OP(op, make) {                                                                                \
     value_t v2 = sv_vec_pop(stack);                                                                           \
     value_t v1 = sv_vec_pop(stack);                                                                           \
     if (!IS_NUMBER(v1) || !IS_NUMBER(v2))                                                                     \
         RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v1, a); value_free(&v2, a),                             \
               "Invalid operands for '%s': %s and %s", #op, TYPE_NAME(v1), TYPE_NAME(v2));                     \
-    value_t res = {.kind = res_kind, .res_field = v1.number op v2.number};                                    \
+    value_t res = make(AS_NUMBER(v1) op AS_NUMBER(v2));                                                       \
     TRY_PUSH_STACK(res);                                                                                      \
     DISPATCH(); }
 
@@ -305,32 +305,32 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
     if (!IS_NUMBER(v1) || !IS_NUMBER(v2))                                                                     \
         RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v1, a); value_free(&v2, a),                             \
               "Invalid operands for '%s': %s and %s", sym, TYPE_NAME(v1), TYPE_NAME(v2));                     \
-    if (!is_safe_int(v1.number) || !is_safe_int(v2.number))                                                   \
+    if (!is_safe_int(AS_NUMBER(v1)) || !is_safe_int(AS_NUMBER(v2)))                                           \
         RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0,                                                            \
               "Operands for '%s' must be integers between -2^53 and 2^53, got %g and %g",                     \
-              sym, v1.number, v2.number);                                                                     \
-    int64_t x = v1.number;                                                                                    \
-    int64_t y = v2.number;                                                                                    \
+              sym, AS_NUMBER(v1), AS_NUMBER(v2));                                                             \
+    int64_t x = AS_NUMBER(v1);                                                                                \
+    int64_t y = AS_NUMBER(v2);                                                                                \
     if ((is_shift) && (y < 0 || y > 63))                                                                      \
         RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0,                                                            \
-              "Shift amount must be between 0 and 63, got %g", v2.number);                                    \
+              "Shift amount must be between 0 and 63, got %g", AS_NUMBER(v2));                                \
     int64_t r = (expr);                                                                                       \
     if (overflowed)                                                                                           \
         RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0, "Result of '%s' overflowed", sym);                         \
     if (r < -(INT64_C(1) << 53) || r > (INT64_C(1) << 53))                                                    \
         RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, (void)0,                                                            \
               "Result of '%s' is outside -2^53 to 2^53", sym);                                                \
-    value_t res = {.kind = VALUE_NUMBER, .number = (double)r};                                                \
+    value_t res = value_number((double)r);                                                                    \
     TRY_PUSH_STACK(res);                                                                                      \
     DISPATCH(); }
 
-#define MATH_OP(op) NUM_BIN_OP(op, VALUE_NUMBER, number)
-#define CMP_OP(op) NUM_BIN_OP(op, VALUE_BOOL, boolean)
+#define MATH_OP(op) NUM_BIN_OP(op, value_number)
+#define CMP_OP(op) NUM_BIN_OP(op, value_bool)
 
 #define EQUALS(want) {                                                                                        \
     value_t v2 = sv_vec_pop(stack);                                                                           \
     value_t v1 = sv_vec_pop(stack);                                                                           \
-    value_t res = {.kind = VALUE_BOOL, .boolean = value_eql(v1, v2) == want};                                 \
+    value_t res = value_bool(value_eql(v1, v2) == want);                                                      \
     value_free(&v1, a);                                                                                       \
     value_free(&v2, a);                                                                                       \
     TRY_PUSH_STACK(res);                                                                                      \
@@ -409,7 +409,7 @@ DISPATCH(); }
             if (!IS_NUMBER(v))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v, a),
                       "Invalid operand for '-': %s", TYPE_NAME(v));
-            value_t res = {.kind = VALUE_NUMBER, .number = -v.number};
+            value_t res = value_number(-AS_NUMBER(v));
             TRY_PUSH_STACK(res);
             DISPATCH();
         }
@@ -419,7 +419,7 @@ DISPATCH(); }
             if (!IS_NUMBER(v1) || !IS_NUMBER(v2))
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&v1, a); value_free(&v2, a),
                       "Invalid operands for '%%': %s and %s", TYPE_NAME(v1), TYPE_NAME(v2));
-            value_t res = {.kind = VALUE_NUMBER, .number = fmod(v1.number, v2.number)};
+            value_t res = value_number(fmod(AS_NUMBER(v1), AS_NUMBER(v2)));
             TRY_PUSH_STACK(res);
             DISPATCH();
         }
@@ -428,7 +428,7 @@ DISPATCH(); }
             n_type n = 0;                                                                                     \
             read(n);                                                                                          \
             value_t arr = init_fn(&stack.arr[stack.size - (mult) * n], n, a);                                 \
-            TRY_NOT_NULL(arr.obj.cell, "when creating collection");                                           \
+            TRY_NOT_NULL(AS_OBJ(arr).cell, "when creating collection");                                       \
             arr_remove_n(&stack, (mult) * n, a);                                                              \
             TRY_PUSH_OWNED(arr);                                                                              \
             DISPATCH(); }
@@ -439,9 +439,9 @@ DISPATCH(); }
         CASE(OP_TUPLE): VALUE_FROM_ARR(1, value_init_tuple, uint8_t, READ_NARROW);
 
 #define OP_MAP_X(fn) do {                                                                                     \
-    uint32_t n = sv_vec_pop(stack).number;                                                                    \
+    uint32_t n = AS_NUMBER(sv_vec_pop(stack));                                                                \
     value_t arr = fn(&stack.arr[stack.size - n], n, a);                                                       \
-    TRY_NOT_NULL(arr.obj.cell, "when creating collection");                                                   \
+    TRY_NOT_NULL(AS_OBJ(arr).cell, "when creating collection");                                               \
     arr_remove_n(&stack, n, a);                                                                               \
     TRY_PUSH_OWNED(arr);                                                                                      \
 } while(0)
@@ -468,7 +468,7 @@ DISPATCH(); }
                       "Record has no field '%s' to update", vm_field_name(&vm->ctx, (uint32_t)missing));
             TRY_OR(updated.items != NULL, value_free(&base, a), "when updating a record");
             value_t out = value_wrap_record(updated, a);
-            TRY_OR(out.obj.cell != NULL, record_deinit(&updated, a); value_free(&base, a),
+            TRY_OR(AS_OBJ(out).cell != NULL, record_deinit(&updated, a); value_free(&base, a),
                    "when updating a record");
 
             arr_remove_n(&stack, 2 * n, a);
@@ -495,7 +495,7 @@ DISPATCH(); }
                 cur = next;
             }
             value_t out = value_wrap_map(cur, a);
-            TRY_OR(out.obj.cell != NULL, map_deinit(&cur, a), "when updating a hashmap");
+            TRY_OR(AS_OBJ(out).cell != NULL, map_deinit(&cur, a), "when updating a hashmap");
 
             arr_remove_n(&stack, 2 * n, a);
             TRY_PUSH_OWNED(out);
@@ -512,7 +512,7 @@ DISPATCH(); }
             list_t list = ll_prepend_arr(AS_LIST(tail), &stack.arr[stack.size - n], n, a);
             TRY_OR(list.cell != NULL, value_free(&tail, a), "when building a list");
             value_t out = value_wrap_list(list, a);
-            TRY_OR(out.obj.cell != NULL, ll_deinit(&list, a); value_free(&tail, a),
+            TRY_OR(AS_OBJ(out).cell != NULL, ll_deinit(&list, a); value_free(&tail, a),
                    "when building a list");
 
             arr_remove_n(&stack, n, a);
@@ -524,19 +524,19 @@ DISPATCH(); }
             value_t v2 = sv_vec_pop(stack);
             value_t v1 = sv_vec_pop(stack);
             if (IS_NUMBER(v1) && IS_NUMBER(v2)) {
-                value_t res = {.kind = VALUE_NUMBER, .number = v1.number + v2.number};
+                value_t res = value_number(AS_NUMBER(v1) + AS_NUMBER(v2));
                 TRY_PUSH_STACK(res);
                 DISPATCH();
             }
-            if (v1.kind == VALUE_OBJ && v2.kind == VALUE_OBJ
-                && v1.obj.cell->value.kind == OBJ_STR && v2.obj.cell->value.kind == OBJ_STR
+            if (VALUE_KIND(v1) == VALUE_OBJ && VALUE_KIND(v2) == VALUE_OBJ
+                && AS_OBJ(v1).cell->value.kind == OBJ_STR && AS_OBJ(v2).cell->value.kind == OBJ_STR
             ) {
-                sv_str_t s = sv_str_add(v1.obj.cell->value.str, v2.obj.cell->value.str, a);
+                sv_str_t s = sv_str_add(AS_OBJ(v1).cell->value.str, AS_OBJ(v2).cell->value.str, a);
                 value_free(&v1, a);
                 value_free(&v2, a);
                 TRY_OR(s.size >= 0, (void)0, "when concatenating strings");
                 value_t res = value_init_str_own(s, a);
-                TRY_NOT_NULL(res.obj.cell, "when creating string");
+                TRY_NOT_NULL(AS_OBJ(res).cell, "when creating string");
                 TRY_PUSH_OWNED(res);
                 DISPATCH();
             }
@@ -545,7 +545,7 @@ DISPATCH(); }
         }
         CASE(OP_NOT): {
             value_t v = sv_vec_pop(stack);
-            value_t res = {.kind = VALUE_BOOL, .boolean = !value_is_truthy(v)};
+            value_t res = value_bool(!value_is_truthy(v));
             value_free(&v, a);
             TRY_PUSH_STACK(res);
             DISPATCH();
@@ -584,13 +584,13 @@ DISPATCH(); }
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&key, a); sv_str_deinit(&text, a),
                       "Index is not an integer: %.*s", (int)text.size, text.chars);
             }
-            int64_t i = (int64_t)key.number;
+            int64_t i = (int64_t)AS_NUMBER(key);
             if (IS_STR(container)) {
                 sv_str_t c = str_get(AS_STR(container), i);
                 if (c.size == 0)
                     goto index_err;
                 out = value_init_str(c, a);
-                TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when indexing a string");
+                TRY_OR(AS_OBJ(out).cell != NULL, value_free(&container, a), "when indexing a string");
             } else {
                 sv_opt_t(value_t) res = IS_LIST(container)
                     ? ll_get(AS_LIST(container), i)
@@ -629,18 +629,18 @@ DISPATCH(); }
                       "Slice bound is not an integer: %.*s", (int)text.size, text.chars);
             }
 
-            int64_t lo = (int64_t)from.number;
-            int64_t hi = IS_NIL(to) ? INT64_MAX : (int64_t)to.number;
+            int64_t lo = (int64_t)AS_NUMBER(from);
+            int64_t hi = IS_NIL(to) ? INT64_MAX : (int64_t)AS_NUMBER(to);
             value_t out;
             if (IS_LIST(container)) {
                 list_t list = ll_slice(AS_LIST(container), lo, hi, a);
                 TRY_OR(list.cell != NULL, value_free(&container, a), "when slicing a list");
                 out = value_wrap_list(list, a);
-                TRY_OR(out.obj.cell != NULL, ll_deinit(&list, a); value_free(&container, a),
+                TRY_OR(AS_OBJ(out).cell != NULL, ll_deinit(&list, a); value_free(&container, a),
                        "when slicing a list");
             } else {
                 out = value_init_str(str_slice(AS_STR(container), lo, hi), a);
-                TRY_OR(out.obj.cell != NULL, value_free(&container, a), "when slicing a string");
+                TRY_OR(AS_OBJ(out).cell != NULL, value_free(&container, a), "when slicing a string");
             }
 
             value_free(&container, a);
@@ -694,19 +694,20 @@ DISPATCH(); }
 #undef RECORD_GET
         CASE(OP_LENGTH): {
             value_t val = sv_vec_pop(stack);
-            value_t ret = { .kind = VALUE_NUMBER };
+            double n = 0;
             if (IS_RECORD(val))
-                ret.number = AS_RECORD(val).size;
+                n = AS_RECORD(val).size;
             else if (IS_STR(val))
-                ret.number = str_count(AS_STR(val));
+                n = str_count(AS_STR(val));
             else if (IS_LIST(val))
-                ret.number = ll_count(AS_LIST(val));
+                n = ll_count(AS_LIST(val));
             else if (IS_MAP(val))
-                ret.number =  map_count(AS_MAP(val));
+                n = map_count(AS_MAP(val));
             else
                 RAISE(VM_ERR_OP_UNSUPPORTED_ARGS, value_free(&val, a),
                       "Type has no length: %s", TYPE_NAME(val));
             value_free(&val, a);
+            value_t ret = value_number(n);
             TRY_PUSH_STACK(ret);
             DISPATCH();
         }
@@ -730,7 +731,7 @@ DISPATCH(); }
             value_t state = sv_vec_pop(stack);
             actor_t actor = actor_init(state, &vm->actor_vtables.arr[i]);
             value_t v = value_wrap_actor(&actor, a);
-            TRY_OR(v.obj.cell != NULL, value_free(&state, a), "when creating actor");
+            TRY_OR(AS_OBJ(v).cell != NULL, value_free(&state, a), "when creating actor");
             TRY_PUSH_OWNED(v);
             DISPATCH();
         }
@@ -741,7 +742,7 @@ DISPATCH(); }
                       "Type is not iterable: %s", TYPE_NAME(v));
             value_t iter = value_init_iter(v, a);
             value_free(&v, a);
-            TRY_NOT_NULL(iter.obj.cell, "when creating iterator");
+            TRY_NOT_NULL(AS_OBJ(iter).cell, "when creating iterator");
             TRY_PUSH_OWNED(iter);
             DISPATCH();
         }
@@ -752,9 +753,9 @@ DISPATCH(); }
                       "Type is not an iterator: %s", TYPE_NAME(v));
             sv_opt_t(value_t) next = iterable_next(&AS_ITER(v), a);
             value_free(&v, a);
-            TRY_OR(!next.is_some || next.value.kind != VALUE_OBJ || next.value.obj.cell != NULL,
+            TRY_OR(!next.is_some || VALUE_KIND(next.value) != VALUE_OBJ || AS_OBJ(next.value).cell != NULL,
                    (void)0, "when advancing iterator");
-            value_t has = { .kind = VALUE_BOOL, .boolean = next.is_some };
+            value_t has = value_bool(next.is_some);
             value_t item = next.is_some ? next.value : value_nil;
             TRY_PUSH_STACK(has);
             TRY_PUSH_OWNED(item);
@@ -769,7 +770,7 @@ DISPATCH(); }
                 &stack.arr[stack.size - n_cls],
                 n_cls,
                 a);
-            TRY_NOT_NULL(cls.obj.cell, "when creating closure");
+            TRY_NOT_NULL(AS_OBJ(cls).cell, "when creating closure");
             arr_remove_n(&stack, n_cls, a);
             TRY_PUSH_OWNED(cls);
             DISPATCH();
@@ -806,7 +807,7 @@ DISPATCH(); }
 
             for (int64_t i = n_members - 1; i >= 0; i--) {
                 value_t member = value_init_closure_member(sv_rc_borrow(group), i, a);
-                TRY_OR(member.obj.cell != NULL, sv_rc_deinit(&group, a), "when creating closure member")
+                TRY_OR(AS_OBJ(member).cell != NULL, sv_rc_deinit(&group, a), "when creating closure member")
                 stack.arr[stack.size++] = member;
             }
             sv_rc_deinit(&group, a);
@@ -817,7 +818,7 @@ DISPATCH(); }
             if (frame->group.cell == NULL)
                 RAISE(VM_ERR_NO_GROUP, (void)0, "No closure group in scope");
             value_t member = value_init_closure_member(sv_rc_borrow(frame->group), i, a);
-            TRY_NOT_NULL(member.obj.cell, "when creating closure member");
+            TRY_NOT_NULL(AS_OBJ(member).cell, "when creating closure member");
             TRY_PUSH_OWNED(member);
             DISPATCH();
         }
@@ -847,7 +848,7 @@ DISPATCH(); }
     value_t ret = fn.fn(args, arg_count, vm);                                                                 \
     stack = vm->stack;                                                                                        \
     frame = &sv_vec_last(vm->call_frames);                                                                    \
-    TRY_OR(ret.kind != VALUE_OBJ || ret.obj.cell != NULL, value_free(&value, a),                              \
+    TRY_OR(VALUE_KIND(ret) != VALUE_OBJ || AS_OBJ(ret).cell != NULL, value_free(&value, a),                   \
            "when returning from a native function");                                                          \
     if (IS_ERR(ret)) {                                                                                        \
         /* the error is complete; its value is fresh, so the message moves out of the cell */                 \
@@ -943,8 +944,7 @@ DISPATCH(); }
         CASE(OP_IS_HASHMAP): {
             value_t v = sv_vec_pop(stack);
             value_t want = sv_vec_pop(stack);
-            value_t res = { .kind = VALUE_BOOL,
-                            .boolean = IS_MAP(v) && (double)map_count(AS_MAP(v)) == want.number };
+            value_t res = value_bool(IS_MAP(v) && (double)map_count(AS_MAP(v)) == AS_NUMBER(want));
             value_free(&v, a);
             value_free(&want, a);
             TRY_PUSH_STACK(res);
@@ -952,7 +952,7 @@ DISPATCH(); }
         }
         CASE(OP_IS_HASHMAP_ANY): {
             value_t v = sv_vec_pop(stack);
-            value_t res = { .kind = VALUE_BOOL, .boolean = IS_MAP(v) };
+            value_t res = value_bool(IS_MAP(v));
             value_free(&v, a);
             TRY_PUSH_STACK(res);
             DISPATCH();
@@ -974,8 +974,7 @@ DISPATCH(); }
         CASE(OP_HAS_FIELD): {
             value_t v = sv_vec_pop(stack);
             uint8_t id = READ_BYTE();
-            value_t res = { .kind = VALUE_BOOL,
-                            .boolean = IS_RECORD(v) && record_get(AS_RECORD(v), id).is_some };
+            value_t res = value_bool(IS_RECORD(v) && record_get(AS_RECORD(v), id).is_some);
             value_free(&v, a);
             TRY_PUSH_STACK(res);
             DISPATCH();
@@ -983,8 +982,7 @@ DISPATCH(); }
         CASE(OP_HAS_KEY): {
             value_t key = sv_vec_pop(stack);
             value_t v = sv_vec_pop(stack);
-            value_t res = { .kind = VALUE_BOOL,
-                            .boolean = IS_MAP(v) && map_get(AS_MAP(v), key).is_some };
+            value_t res = value_bool(IS_MAP(v) && map_get(AS_MAP(v), key).is_some);
             value_free(&key, a);
             value_free(&v, a);
             TRY_PUSH_STACK(res);
@@ -999,7 +997,7 @@ DISPATCH(); }
     list_t rest = ll_tail(AS_LIST(v), a);                                                                     \
     TRY_OR(rest.cell != NULL, (void)0, "when taking a list tail")                                             \
     value_t tail = value_wrap_list(rest, a);                                                                  \
-    TRY_OR(tail.obj.cell != NULL, ll_deinit(&rest, a), "when taking a list tail")                             \
+    TRY_OR(AS_OBJ(tail).cell != NULL, ll_deinit(&rest, a), "when taking a list tail")                         \
     value_t first = value_borrow(ll_head(AS_LIST(v)).value);                                                  \
     TRY_PUSH_OWNED(tail);                                                                                     \
     TRY_PUSH_OWNED(first);                                                                                    \
@@ -1013,7 +1011,7 @@ DISPATCH(); }
 #undef LIST_UNCONS
         CASE(OP_ASSERT_MATCH): {
             value_t test = sv_vec_pop(stack);
-            bool passed = IS_BOOL(test) && test.boolean;
+            bool passed = IS_BOOL(test) && AS_BOOL(test);
             value_free(&test, a);
             if (passed)
                 DISPATCH();

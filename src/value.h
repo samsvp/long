@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include "common.h"
 #include "std/rc.h"
 #include "std/option.h"
@@ -24,6 +25,78 @@ typedef enum {
     VALUE_OBJ,
 } value_kind;
 
+#ifndef LONG_NAN_BOXING
+  #if UINTPTR_MAX == UINT64_MAX
+    #define LONG_NAN_BOXING 1
+  #else
+    #define LONG_NAN_BOXING 0
+  #endif
+#endif
+
+#if LONG_NAN_BOXING
+
+typedef struct value_t {
+    uint64_t bits;
+} value_t;
+
+#define VALUE_QNAN ((uint64_t)0x7ffc000000000000)
+#define VALUE_SIGN ((uint64_t)0x8000000000000000)
+#define VALUE_TAG_MASK ((uint64_t)3 << 48)
+#define VALUE_TAG_ATOM ((uint64_t)1 << 48)
+#define VALUE_TAG_C ((uint64_t)2 << 48)
+#define VALUE_TAG_SINGLE ((uint64_t)3 << 48)
+#define VALUE_PAYLOAD ((uint64_t)0x0000ffffffffffff)
+#define VALUE_NIL_BITS (VALUE_QNAN | VALUE_TAG_SINGLE | 1)
+#define VALUE_FALSE_BITS (VALUE_QNAN | VALUE_TAG_SINGLE | 2)
+#define VALUE_TRUE_BITS (VALUE_QNAN | VALUE_TAG_SINGLE | 3)
+#define VALUE_UNDEFINED_BITS (VALUE_QNAN | VALUE_TAG_SINGLE | 4)
+
+static inline value_kind value_kind_of(value_t v)
+{
+    if ((v.bits & VALUE_QNAN) != VALUE_QNAN)
+        return VALUE_NUMBER;
+    if (v.bits & VALUE_SIGN)
+        return VALUE_OBJ;
+    switch (v.bits & VALUE_TAG_MASK) {
+        case VALUE_TAG_ATOM: return VALUE_ATOM;
+        case VALUE_TAG_C: return VALUE_C;
+        default: break;
+    }
+    if (v.bits == VALUE_NIL_BITS)
+        return VALUE_NIL;
+    if (v.bits == VALUE_UNDEFINED_BITS)
+        return VALUE_UNDEFINED;
+    return VALUE_BOOL;
+}
+
+static inline double value_as_number(value_t v) { double d; memcpy(&d, &v.bits, sizeof(d)); return d; }
+static inline value_t value_number(double n) { value_t v; memcpy(&v.bits, &n, sizeof(n)); return v; }
+
+#define VALUE_KIND(v) value_kind_of(v)
+#define IS_OBJ(v) (((v).bits & (VALUE_QNAN | VALUE_SIGN)) == (VALUE_QNAN | VALUE_SIGN))
+#define IS_NUMBER(v) (((v).bits & VALUE_QNAN) != VALUE_QNAN)
+#define IS_ATOM(v) (((v).bits & (VALUE_QNAN | VALUE_SIGN | VALUE_TAG_MASK)) == (VALUE_QNAN | VALUE_TAG_ATOM))
+#define IS_C(v) (((v).bits & (VALUE_QNAN | VALUE_SIGN | VALUE_TAG_MASK)) == (VALUE_QNAN | VALUE_TAG_C))
+#define IS_NIL(v) ((v).bits == VALUE_NIL_BITS)
+#define IS_BOOL(v) (((v).bits | 1) == VALUE_TRUE_BITS)
+#define AS_OBJ(v) ((sv_rc_t(obj_t)){ .cell = (void*)(uintptr_t)((v).bits & VALUE_PAYLOAD) })
+#define AS_NUMBER(v) value_as_number(v)
+#define AS_ATOM(v) ((double)(uint32_t)((v).bits & VALUE_PAYLOAD))
+#define AS_BOOL(v) ((v).bits == VALUE_TRUE_BITS)
+#define AS_C(v) ((void*)(uintptr_t)((v).bits & VALUE_PAYLOAD))
+
+#define value_atom(id) ((value_t){ VALUE_QNAN | VALUE_TAG_ATOM | (uint32_t)(id) })
+#define value_bool(b) ((value_t){ (b) ? VALUE_TRUE_BITS : VALUE_FALSE_BITS })
+#define value_c(p) ((value_t){ VALUE_QNAN | VALUE_TAG_C | ((uintptr_t)(p) & VALUE_PAYLOAD) })
+#define value_obj(o) ((value_t){ VALUE_QNAN | VALUE_SIGN | ((uintptr_t)(o).cell & VALUE_PAYLOAD) })
+
+static const value_t value_nil = { VALUE_NIL_BITS };
+static const value_t value_undefined = { VALUE_UNDEFINED_BITS };
+static const value_t value_true = { VALUE_TRUE_BITS };
+static const value_t value_false = { VALUE_FALSE_BITS };
+
+#else
+
 typedef struct value_t {
     value_kind kind;
     union {
@@ -34,47 +107,60 @@ typedef struct value_t {
     };
 } value_t;
 
+#define VALUE_KIND(v) ((v).kind)
+#define IS_OBJ(v) ((v).kind == VALUE_OBJ)
 #define IS_NUMBER(v) ((v).kind == VALUE_NUMBER)
 #define IS_ATOM(v) ((v).kind == VALUE_ATOM)
-#define IS_NIL(v) ((v).kind == VALUE_NIL)
-#define IS_FALSEY(v) ((v).kind == VALUE_NIL || ( IS_BOOL((v)) && !AS_BOOL((v)) ) )
-#define IS_BOOL(v) ((v).kind == VALUE_BOOL)
 #define IS_C(v) ((v).kind == VALUE_C)
-#define IS_STR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_STR)
-#define IS_ACTOR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_ACTOR)
-#define IS_ERR(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_ERR)
-#define IS_LIST(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_LIST)
-#define IS_CONS(v) (IS_LIST(v) && !ll_is_empty(AS_LIST(v)))
-#define IS_NATIVE(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_NATIVE_FN)
-#define IS_CLOSURE(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_CLOSURE)
-#define IS_CLOSURE_MEMBER(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_CLOSURE_MEMBER)
-#define IS_ITER(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_ITER)
-#define IS_RECORD(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_RECORD)
-#define IS_TUPLE(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_TUPLE)
-#define IS_MAP(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_MAP)
-#define IS_USER_VALUE(v) ((v).kind == VALUE_OBJ && (v).obj.cell->value.kind == OBJ_USER_VALUE)
-
+#define IS_NIL(v) ((v).kind == VALUE_NIL)
+#define IS_BOOL(v) ((v).kind == VALUE_BOOL)
+#define AS_OBJ(v) ((v).obj)
 #define AS_NUMBER(v) ((v).number)
 #define AS_ATOM(v) ((v).number)
 #define AS_BOOL(v) ((v).boolean)
 #define AS_C(v) ((v).c)
-#define AS_STR(v) ((v).obj.cell->value.str)
-#define AS_ACTOR(v) ((v).obj.cell->value.actor)
-#define AS_ERR(v) ((v).obj.cell->value.err)
-#define AS_LIST(v) ((v).obj.cell->value.list)
-#define AS_NATIVE(v) ((v).obj.cell->value.fn)
-#define AS_CLOSURE(v) ((v).obj.cell->value.closure)
-#define AS_CLOSURE_MEMBER(v) ((v).obj.cell->value.closure_member)
-#define AS_ITER(v) ((v).obj.cell->value.iter)
-#define AS_RECORD(v) ((v).obj.cell->value.record)
-#define AS_TUPLE(v) ((v).obj.cell->value.tuple)
-#define AS_MAP(v) ((v).obj.cell->value.map)
-#define AS_USER_VALUE(v) ((v).obj.cell->value.uservalue)
+
+#define value_number(n) ((value_t){ .kind = VALUE_NUMBER, .number = (n) })
+#define value_atom(id) ((value_t){ .kind = VALUE_ATOM, .number = (id) })
+#define value_bool(b) ((value_t){ .kind = VALUE_BOOL, .boolean = (b) })
+#define value_c(p) ((value_t){ .kind = VALUE_C, .c = (p) })
+#define value_obj(o) ((value_t){ .kind = VALUE_OBJ, .obj = (o) })
 
 static const value_t value_nil = { .kind = VALUE_NIL };
 static const value_t value_undefined = { .kind = VALUE_UNDEFINED };
 static const value_t value_true = { .kind = VALUE_BOOL, .boolean = true };
 static const value_t value_false = { .kind = VALUE_BOOL, .boolean = false };
+
+#endif
+
+#define IS_FALSEY(v) (IS_NIL(v) || ( IS_BOOL((v)) && !AS_BOOL((v)) ) )
+#define IS_OBJ_KIND(v, k) (IS_OBJ(v) && AS_OBJ(v).cell->value.kind == (k))
+#define IS_STR(v) IS_OBJ_KIND(v, OBJ_STR)
+#define IS_ACTOR(v) IS_OBJ_KIND(v, OBJ_ACTOR)
+#define IS_ERR(v) IS_OBJ_KIND(v, OBJ_ERR)
+#define IS_LIST(v) IS_OBJ_KIND(v, OBJ_LIST)
+#define IS_CONS(v) (IS_LIST(v) && !ll_is_empty(AS_LIST(v)))
+#define IS_NATIVE(v) IS_OBJ_KIND(v, OBJ_NATIVE_FN)
+#define IS_CLOSURE(v) IS_OBJ_KIND(v, OBJ_CLOSURE)
+#define IS_CLOSURE_MEMBER(v) IS_OBJ_KIND(v, OBJ_CLOSURE_MEMBER)
+#define IS_ITER(v) IS_OBJ_KIND(v, OBJ_ITER)
+#define IS_RECORD(v) IS_OBJ_KIND(v, OBJ_RECORD)
+#define IS_TUPLE(v) IS_OBJ_KIND(v, OBJ_TUPLE)
+#define IS_MAP(v) IS_OBJ_KIND(v, OBJ_MAP)
+#define IS_USER_VALUE(v) IS_OBJ_KIND(v, OBJ_USER_VALUE)
+
+#define AS_STR(v) (AS_OBJ(v).cell->value.str)
+#define AS_ACTOR(v) (AS_OBJ(v).cell->value.actor)
+#define AS_ERR(v) (AS_OBJ(v).cell->value.err)
+#define AS_LIST(v) (AS_OBJ(v).cell->value.list)
+#define AS_NATIVE(v) (AS_OBJ(v).cell->value.fn)
+#define AS_CLOSURE(v) (AS_OBJ(v).cell->value.closure)
+#define AS_CLOSURE_MEMBER(v) (AS_OBJ(v).cell->value.closure_member)
+#define AS_ITER(v) (AS_OBJ(v).cell->value.iter)
+#define AS_RECORD(v) (AS_OBJ(v).cell->value.record)
+#define AS_TUPLE(v) (AS_OBJ(v).cell->value.tuple)
+#define AS_MAP(v) (AS_OBJ(v).cell->value.map)
+#define AS_USER_VALUE(v) (AS_OBJ(v).cell->value.uservalue)
 
 sv_opt_def(value_t);
 

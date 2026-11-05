@@ -37,7 +37,7 @@ void str_iter_deinit(str_iter_t* it, const sv_allocator_t* a)
 value_t str_iter_next(str_iter_t* it, const sv_allocator_t* a)
 {
     if (it->i >= it->str->size)
-        return (value_t){ .kind = VALUE_NIL };
+        return value_nil;
 
     int64_t len = utf8_len(it->str->chars[it->i]);
     sv_str_t slice = sv_str_slice(*it->str, it->i, it->i + len);

@@ -193,33 +193,33 @@ static uint32_t str_hash(sv_str_t s)
  */
 static uint32_t value_hash(value_t v)
 {
-    switch (v.kind) {
-        case VALUE_NUMBER:
-        case VALUE_ATOM: return number_hash(AS_NUMBER(v));
+    switch (VALUE_KIND(v)) {
+        case VALUE_NUMBER: return number_hash(AS_NUMBER(v));
+        case VALUE_ATOM: return number_hash(AS_ATOM(v));
         case VALUE_UNDEFINED: return 0;
         case VALUE_NIL: return 1;
         case VALUE_BOOL: return AS_BOOL(v) ? 2 : 3;
         case VALUE_C: return (uint32_t)((uintptr_t)AS_C(v) >> 4);
         case VALUE_OBJ:
-            switch (v.obj.cell->value.kind) {
-                case OBJ_STR: return str_hash(v.obj.cell->value.str);
+            switch (AS_OBJ(v).cell->value.kind) {
+                case OBJ_STR: return str_hash(AS_OBJ(v).cell->value.str);
                 case OBJ_LIST: {
                     uint32_t h = 17;
-                    ll_iter_t it = ll_iter_init_no_borrow(v.obj.cell->value.list);
+                    ll_iter_t it = ll_iter_init_no_borrow(AS_OBJ(v).cell->value.list);
                     for (sv_opt_t(value_t) e = ll_iter_next(&it); e.is_some; e = ll_iter_next(&it))
                         h ^= value_hash(e.value) + 0x9e3779b9u + (h << 6) + (h >> 2);
                     return h;
                 }
                 case OBJ_TUPLE: {
                     uint32_t h = 51;
-                    tuple_t t = v.obj.cell->value.tuple;
+                    tuple_t t = AS_OBJ(v).cell->value.tuple;
                     for (uint8_t i = 0; i < t.size; i++)
                         h ^= value_hash(t.items[i]) + 0x9e3779b9u + (h << 6) + (h >> 2);
                     return h;
                 }
                 case OBJ_RECORD: {
                     uint32_t h = 34;
-                    record_t t = v.obj.cell->value.record;
+                    record_t t = AS_OBJ(v).cell->value.record;
                     for (uint8_t i = 0; i < t.size; i++)
                         h ^= (t.items[i].id * 31u ^ value_hash(t.items[i].value))
                              + 0x9e3779b9u + (h << 6) + (h >> 2);
@@ -227,7 +227,7 @@ static uint32_t value_hash(value_t v)
                 }
                 case OBJ_MAP: {
                     uint32_t h = 0;
-                    map_iter_t it = map_iter_init_no_borrow(v.obj.cell->value.map);
+                    map_iter_t it = map_iter_init_no_borrow(AS_OBJ(v).cell->value.map);
                     for (sv_opt_t(kv_t) kv = map_iter_next(&it); kv.is_some; kv = map_iter_next(&it))
                         h += value_hash(kv.value.key) * 31u ^ value_hash(kv.value.value);
                     return h;
@@ -240,7 +240,7 @@ static uint32_t value_hash(value_t v)
                 case OBJ_CLOSURE:
                 case OBJ_ACTOR:
                 case OBJ_CLOSURE_MEMBER:
-                    return (uint32_t)((uintptr_t)v.obj.cell >> 4);
+                    return (uint32_t)((uintptr_t)AS_OBJ(v).cell >> 4);
             }
             return 0;
     }
@@ -638,8 +638,8 @@ static sv_opt_t(value_t) iterable_map_next(void* self, const sv_allocator_t* a)
         return sv_opt_none_t(value_t);
 
     const value_t pair[4] = {
-        { .kind = VALUE_NUMBER, .number = FIELD_KEY }, kv.value.key,
-        { .kind = VALUE_NUMBER, .number = FIELD_VALUE }, kv.value.value,
+        value_number(FIELD_KEY), kv.value.key,
+        value_number(FIELD_VALUE), kv.value.value,
     };
     return sv_opt_some_t(value_t, value_init_record(pair, 2, a));
 }

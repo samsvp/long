@@ -55,10 +55,10 @@ static inline value_t sv_test_compiler_eval_frames(const char* src, int64_t max_
    sv_opt_t(error_t) err;
    if (!sv_test_compiler_run(src, max_frames, &ctx, &vm, &err)) {
       *ok = false;
-      return (value_t){ .kind = VALUE_NIL };
+      return value_nil;
    }
    *ok = !err.is_some && vm.stack.size == 1;
-   value_t res = *ok ? value_borrow(sv_vec_last(vm.stack)) : (value_t){ .kind = VALUE_NIL };
+   value_t res = *ok ? value_borrow(sv_vec_last(vm.stack)) : value_nil;
    if (err.is_some)
       error_free(&err.value, &sv_gpa);
    vm_deinit(&vm);
@@ -74,7 +74,7 @@ static inline bool sv_test_compiler_num_frames(const char* src, double expected,
 {
    bool ok = false;
    value_t v = sv_test_compiler_eval_frames(src, max_frames, &ok);
-   bool res = ok && v.kind == VALUE_NUMBER && v.number == expected;
+   bool res = ok && VALUE_KIND(v) == VALUE_NUMBER && AS_NUMBER(v) == expected;
    value_free(&v, &sv_gpa);
    return res;
 }
@@ -83,7 +83,7 @@ static inline bool sv_test_compiler_num(const char* src, double expected)
 {
    bool ok = false;
    value_t v = sv_test_compiler_eval(src, &ok);
-   bool res = ok && v.kind == VALUE_NUMBER && v.number == expected;
+   bool res = ok && VALUE_KIND(v) == VALUE_NUMBER && AS_NUMBER(v) == expected;
    value_free(&v, &sv_gpa);
    return res;
 }
@@ -111,7 +111,7 @@ static inline bool sv_test_compiler_kind(const char* src, value_kind expected)
 {
    bool ok = false;
    value_t v = sv_test_compiler_eval(src, &ok);
-   bool res = ok && v.kind == expected;
+   bool res = ok && VALUE_KIND(v) == expected;
    value_free(&v, &sv_gpa);
    return res;
 }
@@ -128,12 +128,12 @@ static inline bool sv_test_compiler_cmp(const char* src, value_t expected, bool 
 
 static inline value_t sv_test_compiler_val(double n)
 {
-   return (value_t){ .kind = VALUE_NUMBER, .number = n };
+   return value_number(n);
 }
 
 static inline value_t sv_test_compiler_atom(double id)
 {
-   return (value_t){ .kind = VALUE_ATOM, .number = id };
+   return value_atom(id);
 }
 
 static inline int sv_test_compiler_runtime_err_frames(const char* src, int64_t max_frames)
@@ -236,6 +236,11 @@ static inline void sv_test_compiler_basics(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("if true do 3 - 4 end", -1));
    sv_test_run(t, sv_test_compiler_kind("if false do 3 - 4 end", VALUE_NIL));
    sv_test_run(t, sv_test_compiler_num("1 / 0", (double)INFINITY));
+   sv_test_run(t, sv_test_compiler_num("x = 0 / 0\nif x == x do 0 else 1 end", 1));
+   sv_test_run(t, sv_test_compiler_num(
+      "import math(\"math\")\nif math::isnan(-(0 / 0)) and math::isnan(math::nan()) do 1 else 0 end", 1));
+   sv_test_run(t, sv_test_compiler_num("import math(\"math\")\nif math::inf() == 1 / 0 do 1 else 0 end", 1));
+   sv_test_run(t, sv_test_compiler_num("-0 + 0", 0));
    sv_test_run(t, sv_test_compiler_kind("2 == 2", VALUE_BOOL));
    sv_test_run(t, sv_test_compiler_num("if 2 == 2 do 1 else 0 end", 1));
    sv_test_run(t, sv_test_compiler_num("if 2 == 3 do 1 else 0 end", 0));
@@ -726,7 +731,7 @@ static inline void sv_test_compiler_call_stack(sv_testing_t* t)
       "| is_odd(x) if x == 0 do false else not not is_even(x - 1) end\n"
       "end\n"
       "is_even(10000)", &ok);
-   sv_test_run(t, ok && v.kind == VALUE_BOOL && v.boolean);
+   sv_test_run(t, ok && VALUE_KIND(v) == VALUE_BOOL && AS_BOOL(v));
 
    /* A closure made deep in the stack outlives its frames. */
    sv_test_run(t, sv_test_compiler_num(
@@ -756,7 +761,7 @@ static inline void sv_test_compiler_call_stack(sv_testing_t* t)
       "| is_odd(x) if x == 0 do false else is_even(x - 1) end\n"
       "end\n"
       "is_even(1001)", 100, &ok);
-   sv_test_run(t, ok && v.kind == VALUE_BOOL && !v.boolean);
+   sv_test_run(t, ok && VALUE_KIND(v) == VALUE_BOOL && !AS_BOOL(v));
    sv_test_run(t, sv_test_compiler_num_frames(
       "fun loop(n) do\n  m = n - 1\n  if n == 0 do 0 else loop(m) end\nend\nloop(1000)", 0, 100));
    sv_test_run(t, sv_test_compiler_num_frames(
@@ -783,8 +788,8 @@ static inline void sv_test_compiler_groups(sv_testing_t* t)
       "end\n"
       "is_even(10)", &ok);
    sv_test_run(t, ok);
-   sv_test_run(t, v.kind == VALUE_BOOL);
-   sv_test_run(t, v.boolean);
+   sv_test_run(t, VALUE_KIND(v) == VALUE_BOOL);
+   sv_test_run(t, AS_BOOL(v));
    value_free(&v, &sv_gpa);
 }
 
@@ -1213,7 +1218,7 @@ static inline void sv_test_compiler_fun_clauses(sv_testing_t* t)
       "end\n"
       "is_even(10)", &ok);
    sv_test_run(t, ok);
-   sv_test_run(t, v.kind == VALUE_BOOL && v.boolean);
+   sv_test_run(t, VALUE_KIND(v) == VALUE_BOOL && AS_BOOL(v));
    value_free(&v, &sv_gpa);
 
    /* Aliases in clause heads, name first or last, and over a parameter tuple. */
