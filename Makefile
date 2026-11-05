@@ -4,7 +4,7 @@ WARN = -Wall -Wextra -Werror -Wswitch-enum -pedantic
 SAN ?= -fsanitize=address,undefined
 TARGET ?= long
 
-RELEASE_FLAGS = $(STD) $(WARN) -O3
+RELEASE_FLAGS = $(STD) $(WARN) -O3 -flto=auto
 TEST_FLAGS = $(STD) $(WARN) -O0 -g -fno-omit-frame-pointer $(SAN) -DSV_ARENA_POISON
 DEBUG_FLAGS = $(STD) $(WARN) -O0 -g -fno-omit-frame-pointer $(SAN) -DSV_ARENA_POISON
 DEPFLAGS = -MMD -MP
