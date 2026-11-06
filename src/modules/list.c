@@ -5,6 +5,7 @@
 #include "../obj/list.h"
 #include "../obj/iterator.h"
 #include "../obj/iterable.h"
+#include "../obj/map.h"
 #include "math.h"
 #include "../stable_sort.h"
 #include <math.h>
@@ -654,6 +655,74 @@ value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
     }
 
     return value_number(count);
+}
+
+static value_t uniq(value_t value, const value_t* f, vm_t* vm)
+{
+    const sv_allocator_t* a = vm->ctx.alloc;
+
+    iter_storage_t storage;
+    iterable_t iter = iter_init_no_borrow(value, &storage);
+    if (iter.self == NULL)
+        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, &vm->ctx);
+
+    int64_t count = iterable_len(&iter);
+
+    sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
+    if (vec.arr == NULL)
+        return oom_error(&vm->ctx);
+    transient_hashmap_t seen = thm_init(count, a);
+    if (seen.set.store.cell == NULL) {
+        sv_vec_deinit(&vec, a);
+        return oom_error(&vm->ctx);
+    }
+
+    value_t err = value_nil;
+    sv_opt_t(value_t) v = sv_opt_none_t(value_t);
+    while (v = iterable_next(&iter, a), v.is_some) {
+        value_t key = f == NULL ? v.value : vm_call_value(vm, *f, &v.value, 1);
+        if (IS_ERR(key)) {
+            value_free(&v.value, a);
+            err = key;
+            break;
+        }
+
+        bool ok = true;
+        bool repeated = thm_get_or_put(&seen, (kv_t){ .key = key, .value = value_nil }, &ok, a).is_some;
+        if (f != NULL)
+            value_free(&key, a);
+        if (!ok) {
+            value_free(&v.value, a);
+            err = oom_error(&vm->ctx);
+            break;
+        }
+
+        if (repeated)
+            value_free(&v.value, a);
+        else
+            vec.arr[count - ++vec.size] = v.value;
+    }
+    thm_deinit(&seen, a);
+
+    if (IS_ERR(err)) {
+        free_back_filled(&vec, a);
+        return err;
+    }
+    if (vec.size < count)
+        memmove(vec.arr, vec.arr + count - vec.size, vec.size * sizeof(value_t));
+    return value_from_list(vec, vm);
+}
+
+value_t ntvl_uniq(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+    return uniq(args[0], NULL, vm);
+}
+
+value_t ntvl_uniq_by(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+    return uniq(args[0], &args[1], vm);
 }
 
 value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)

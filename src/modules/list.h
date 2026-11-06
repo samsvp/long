@@ -108,6 +108,14 @@ value_t ntvl_count(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_count_by(const value_t*, uint8_t, vm_t*);
 /**
+ * uniq(lst): returns lst without repeated elements, keeping the first occurrence of each.
+ */
+value_t ntvl_uniq(const value_t*, uint8_t, vm_t*);
+/**
+ * uniq_by(lst, f): returns lst without elements whose f(x) was already seen, keeping the first.
+ */
+value_t ntvl_uniq_by(const value_t*, uint8_t, vm_t*);
+/**
  * contains(list, val): true if list contains val, false otherwise
  */
 value_t ntvl_contains(const value_t*, uint8_t, vm_t*);
