@@ -245,7 +245,12 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
 } while (0)
 
 value_t ntv_randi(const value_t* args, uint8_t n, vm_t* vm)
-{ RAND(rand() % (int)range + (int)AS_NUMBER(min)); }
+{
+    if (n == 2 && IS_NUMBER(args[0]) && IS_NUMBER(args[1])
+        && !(fabs(AS_NUMBER(args[1]) - AS_NUMBER(args[0])) >= 1))
+        return value_nil;
+    RAND(rand() % (int)range + (int)AS_NUMBER(min));
+}
 
 value_t ntv_randf(const value_t* args, uint8_t n, vm_t* vm)
 { RAND((double)rand()/(double)(RAND_MAX/range) + AS_NUMBER(min)); }

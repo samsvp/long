@@ -1076,6 +1076,8 @@ static inline void sv_test_compiler_fun_clauses(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("fun f(x) x + 2\nf(1)", 3));
    sv_test_run(t, sv_test_compiler_num("fun f(x) do y = 3; y + x end\nf(1)", 4));
    sv_test_run(t, sv_test_compiler_num("fun | a(x) x + 1 | b(y) y * 2 end\na(1) + b(3)", 8));
+   sv_test_run(t, sv_test_compiler_num(
+      "fun\n| a(x) do\n  y = x + 1\n  b(y)\n| b(y) do y * 2\nend\na(1) + b(3)", 10));
 
    /* Clause bodies are blocks. */
    sv_test_run(t, sv_test_compiler_num("fun f(x) | 0 do y = 3; y + 1 end; f(0)", 4));

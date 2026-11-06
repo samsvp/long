@@ -650,8 +650,12 @@ static sexpr_t parse_fun_body(scanner_t* s, ctx_t* ctx, sv_vec_t(sexpr_t)* list,
 
     sexpr_t body;
     token_t pipe;
+    token_t do_token;
     if (parser_check(s, ctx, kind_pattern(TOKEN_PIPE), &pipe)) {
         body = parse_fun_clauses(s, ctx, args, fun_token, term, pending, a);
+    } else if (pending != NULL && parser_check(s, ctx, kw_pattern(KEYWORD_DO), &do_token)) {
+        token_pattern ends[] = { kind_pattern(TOKEN_PIPE), kw_pattern(KEYWORD_END) };
+        body = parse_block(s, ctx, ends, 2, do_token.line, term, a);
     } else {
         body = parse_expr(s, ctx, 0, a);
         if (pending != NULL && !parser_check(s, ctx, kind_pattern(TOKEN_PIPE), term))

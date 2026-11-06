@@ -357,6 +357,7 @@ static inline void sv_test_parser_newlines(sv_testing_t* t)
    sv_test_parse_ok(t, "match x\n| 1 do 2\n| _ do 3\nend");
    sv_test_parse_ok(t, "match x\n| (1, a)\nwhen a > 0 do a\n| _ do 3\nend");
    sv_test_parse_ok(t, "fun\n| a(x) x\n| b(x)\n  x\nend");
+   sv_test_parse_ok(t, "fun\n| a(x) do\n  y = x\n  y\n| b(x) do x\nend");
    sv_test_parse_ok(t, "x\n|> f()\n|> g()");
    sv_test_parse_ok(t, "x # c\n|> f()");
    sv_test_parse_ok(t, "(a,\n b) = t");
