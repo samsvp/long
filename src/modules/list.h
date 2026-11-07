@@ -123,5 +123,9 @@ value_t ntvl_contains(const value_t*, uint8_t, vm_t*);
  * join(lst, joiner): joins the strings of `lst` into one string, with `joiner` between each pair.
  */
 value_t ntvl_join(const value_t*, uint8_t, vm_t*);
+/**
+ * sum(lst): sums the elements of the list
+ */
+value_t ntvl_sum(const value_t*, uint8_t, vm_t*);
 
 #endif

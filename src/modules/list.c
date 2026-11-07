@@ -524,10 +524,8 @@ static value_t any_all(const value_t* args, uint8_t n, bool is_all, vm_t* vm)
 
     CHECK_LIST(args[0]);
     list_t l = AS_LIST(args[0]);
-    int64_t count = ll_count(l);
-    if (count == 0)
-        return value_true;
 
+    // an empty list falls through the loop: all is true, any is false
     ll_iter_t iter = ll_iter_init_no_borrow(l);
     sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
@@ -782,4 +780,61 @@ value_t ntvl_join(const value_t* args, uint8_t n, vm_t* vm)
     value_t ret = value_init_str_own(sv_strb_to_str(&b), a);
     CHECK_OOM(AS_OBJ(ret).cell);
     return ret;
+}
+
+static value_t sum_string(list_t list, vm_t* vm)
+{
+    const sv_allocator_t* a = vm->ctx.alloc;
+    sv_str_builder b = sv_strb_init();
+
+    ll_iter_t iter = ll_iter_init_no_borrow(list);
+    sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
+    while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
+        if (!IS_STR(maybe_x.value)) {
+            sv_strb_deinit(&b, a);
+            return bad_arg_type_error(maybe_x.value, VALUE_OBJ, OBJ_STR, &vm->ctx);
+        }
+        sv_str_t s = AS_STR(maybe_x.value);
+        if (sv_strb_add(&b, s.chars, s.size, a) < 0) {
+            sv_strb_deinit(&b, a);
+            return oom_error(&vm->ctx);
+        }
+    }
+
+    value_t ret = value_init_str_own(sv_strb_to_str(&b), a);
+    CHECK_OOM(AS_OBJ(ret).cell);
+    return ret;
+}
+
+static value_t sum_number(list_t list, vm_t* vm)
+{
+    ll_iter_t iter = ll_iter_init_no_borrow(list);
+    sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
+    double acc = 0;
+    while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
+        if (!IS_NUMBER(maybe_x.value)) {
+            return bad_arg_type_error(maybe_x.value, VALUE_NUMBER, OBJ_STR, &vm->ctx);
+        }
+        acc += AS_NUMBER(maybe_x.value);
+    }
+
+    return value_number(acc);
+}
+
+value_t ntvl_sum(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    CHECK_LIST(args[0]);
+
+    list_t list = AS_LIST(args[0]);
+    if (ll_is_empty(list))
+        return value_number(0);
+
+    value_t first = ll_get(list, 0).value;
+    if (IS_STR(first))
+        return sum_string(list, vm);
+    if (IS_NUMBER(first))
+        return sum_number(list, vm);
+    return bad_arg_type_error(first, VALUE_NUMBER, OBJ_STR, &vm->ctx);
 }

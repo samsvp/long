@@ -1859,6 +1859,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 2, .name = "any", .fn = ntvl_any },
         { .arity = 1, .name = "min", .fn = ntvl_min },
         { .arity = 1, .name = "max", .fn = ntvl_max },
+        { .arity = 1, .name = "sum", .fn = ntvl_sum },
         { .arity = 2, .name = "min_by", .fn = ntvl_min_by },
         { .arity = 2, .name = "max_by", .fn = ntvl_max_by },
         { .arity = 2, .name = "count", .fn = ntvl_count },
