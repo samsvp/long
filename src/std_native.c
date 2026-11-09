@@ -28,12 +28,12 @@ void init_rand(void)
     }
 }
 
-value_t bad_arg_type_error(value_t v, value_kind expected_k, obj_kind expected_o, const vm_ctx_t* ctx)
+value_t bad_arg_type_error(value_t v, value_kind expected_k, obj_kind expected_o, const vm_t* vm)
 {
-    return value_init_err(error_fmt(VM_ERR_WRONG_TYPE, ctx->file, ctx->line, ctx->alloc,
+    return value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), vm->ctx.alloc,
                                     "Wrong type of argument: expected %s, got %s",
                                     value_kind_str(expected_k, expected_o), value_type_name(v)),
-                          ctx->alloc);
+                          vm->ctx.alloc);
 }
 
 value_t ntv_print(const value_t* values, uint8_t n, vm_t* vm)
@@ -66,9 +66,9 @@ value_t ntv_println(const value_t* values, uint8_t n, vm_t* vm)
 static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
 {
     if (!IS_STR(args[0]))
-        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_STR, &vm->ctx);
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_STR, vm);
     if (!IS_TUPLE(args[1]) && !IS_LIST(args[1]))
-        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_TUPLE, &vm->ctx);
+        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_TUPLE, vm);
 
     const sv_allocator_t* a = vm->ctx.alloc;
     iter_storage_t storage;
@@ -87,7 +87,7 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
 
         if (i == fmt.size) {
             const char* err_msg = "Percent simbol '%%' without value descriptor. Use a double '%%%%' if you want to print '%%'";
-            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a, err_msg), a);
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), a, err_msg), a);
             goto done;
         }
 
@@ -99,14 +99,14 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
             continue;
         }
         if (c != 'v') {
-            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), a,
                                            "Unknown value descriptor '%c'", c), a);
             goto done;
         }
 
         sv_opt_t(value_t) v = iterable_next(&iter, a);
         if (!v.is_some) {
-            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), a,
                                            "No value left to print"), a);
             goto done;
         }
@@ -119,7 +119,7 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
         goto done;
 
 oom:
-    ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, a, "OOM"), a);
+    ret = value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), a, "OOM"), a);
 done:
     return ret;
 }
@@ -148,7 +148,7 @@ value_t ntv_sprintf(const value_t* values, uint8_t n, vm_t* vm)
     }
     ret = value_init_str_own(sv_strb_to_str(&b), vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL)
-        return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+        return value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
     return ret;
 }
 
@@ -165,7 +165,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     assert(n == 1);
 
     if (!IS_STR(values[0]))
-        return bad_arg_type_error(values[0], VALUE_OBJ, OBJ_STR, &vm->ctx);
+        return bad_arg_type_error(values[0], VALUE_OBJ, OBJ_STR, vm);
 
     printf("%.*s\n", (int)AS_STR(values[0]).size, AS_STR(values[0]).chars);
 
@@ -174,7 +174,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     char c;
     while (c = getchar(), c != '\n' && c != EOF) {
         if (sv_strb_add_char(&b, c, vm->ctx.alloc) == -1) {
-            ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+            ret = value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
             goto ret;
         }
     }
@@ -182,7 +182,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     sv_str_t str = sv_strb_to_str(&b);
     ret = value_init_str(str, vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL)
-        value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+        value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
 
 ret:
     sv_strb_deinit(&b, vm->ctx.alloc);
@@ -196,7 +196,7 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
     value_t v = args[0];
 
     if (!IS_LIST(v) && !IS_STR(v) && !IS_MAP(v) && !IS_ITER(v))
-        return bad_arg_type_error(v, VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(v, VALUE_OBJ, OBJ_ITER, vm);
 
     double count = 0;
 
@@ -234,9 +234,9 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
     value_t min = args[0];                                                     \
     value_t max = args[1];                                                     \
     if (!IS_NUMBER(min))                                                       \
-        return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, &vm->ctx);      \
+        return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, vm);      \
     if (!IS_NUMBER(max))                                                       \
-        return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, &vm->ctx);      \
+        return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, vm);      \
     if (AS_NUMBER(min) > AS_NUMBER(max))                                       \
         return value_nil;                                                      \
     double range = fabs(AS_NUMBER(max) - AS_NUMBER(min));                      \

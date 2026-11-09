@@ -10,7 +10,7 @@
 #include "value.h"
 #include "obj.h"
 
-value_t bad_arg_type_error(value_t, value_kind expected_k, obj_kind expected_o, const vm_ctx_t*);
+value_t bad_arg_type_error(value_t, value_kind expected_k, obj_kind expected_o, const vm_t*);
 
 void init_rand(void);
 

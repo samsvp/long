@@ -7,7 +7,7 @@
 
 #define CHECK_NUMBER(v) do {                                                   \
     if (!IS_NUMBER(v))                                                         \
-        return bad_arg_type_error(v, VALUE_NUMBER, OBJ_LIST, &vm->ctx);        \
+        return bad_arg_type_error(v, VALUE_NUMBER, OBJ_LIST, vm);             \
 } while (0)
 
 /**

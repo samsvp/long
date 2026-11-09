@@ -20,8 +20,6 @@ typedef sv_vec_t(value_t) value_arr;
 typedef struct vm_ctx_t {
     const sv_allocator_t* alloc;
     sv_logger_t logger;
-    const char* file;
-    int64_t line; // the line of the instruction being executed, for the errors natives build
 
     hashmap_t record_fields;
     const char** record_key_names;
@@ -76,6 +74,14 @@ sv_opt_t(uint32_t) vm_get_record_idx(vm_t, sv_str_t);
  * table, and shows the field as `?`.
  */
 const char* vm_field_name(const vm_ctx_t*, uint32_t id);
+/**
+ * Returns the line of the instruction being executed, 0 outside one.
+ */
+int64_t vm_line(const vm_t*);
+/**
+ * Returns the file of the instruction being executed, NULL outside one.
+ */
+const char* vm_file(const vm_t*);
 
 /**
  * Interprets the VM bytecode.

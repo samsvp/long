@@ -18,8 +18,15 @@ typedef struct {
 sv_vec_def(loc_t);
 
 typedef struct {
+    uint32_t start;
+    loc_t loc;
+} loc_run_t;
+
+sv_vec_def(loc_run_t);
+
+typedef struct {
     sv_vec_t(uint8_t) bytecode;
-    sv_vec_t(loc_t) locs;
+    sv_vec_t(loc_run_t) locs;
     sv_vec_t(value_t) constants;
     sv_vec_t(fn_t) functions;
 } chunk_t;
@@ -33,6 +40,10 @@ typedef struct fn_t {
 
 chunk_t chunk_init(void);
 void chunk_deinit(chunk_t*, const sv_allocator_t*);
+/**
+ * Returns the source location of the byte at the offset.
+ */
+loc_t chunk_loc(const chunk_t*, int64_t offset);
 
 /**
  * Frees the function, its chunk and the functions nested in it.

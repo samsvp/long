@@ -130,7 +130,7 @@ static void trace_frames(vm_t* vm, error_t* err, int64_t first, int64_t top_ip)
         sv_str_t name = f->fn->name.size > 0 ? f->fn->name : sv_str_init("<top level>");
         char line[FILENAME_MAX + 128];
         if (ip > 0) {
-            loc_t loc = f->fn->chunk.locs.arr[ip - 1];
+            loc_t loc = chunk_loc(&f->fn->chunk, ip - 1);
             snprintf(line, sizeof(line), "\n  in %.*s at %s:%" PRId32, (int)name.size, name.chars,
                      vm->files.arr[loc.file].chars, loc.line);
         } else {
@@ -147,15 +147,30 @@ static void trace_frames(vm_t* vm, error_t* err, int64_t first, int64_t top_ip)
     }
 }
 
-#define ERROR(_msg, code) error_fmt(code, file, line, a, "%s", _msg)
+int64_t vm_line(const vm_t* vm)
+{
+    if (vm->call_frames.size == 0)
+        return 0;
+    const call_frame_t* f = &sv_vec_last(vm->call_frames);
+    return chunk_loc(&f->fn->chunk, f->ip - 1).line;
+}
+
+const char* vm_file(const vm_t* vm)
+{
+    if (vm->call_frames.size == 0)
+        return NULL;
+    const call_frame_t* f = &sv_vec_last(vm->call_frames);
+    return vm->files.arr[chunk_loc(&f->fn->chunk, f->ip - 1).file].chars;
+}
+
+#define ERROR(_msg, code) (callee_fn == NULL                                                                  \
+    ? error_fmt(code, vm_file(vm), vm_line(vm), a, "%s", _msg)                                                \
+    : error_fmt(code, vm->files.arr[callee_fn->loc.file].chars, callee_fn->loc.line, a, "%s", _msg))
 value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg_count)
 {
     const sv_allocator_t* a = vm->ctx.alloc;
     // the caller's line until the callee is known, then its definition line
-    const char* const caller_file = vm->ctx.file;
-    const int64_t caller_line = vm->ctx.line;
-    const char* file = caller_file;
-    int64_t line = caller_line;
+    const fn_t* callee_fn = NULL;
     if (!IS_CLOSURE(callee) && !IS_NATIVE(callee) && !IS_CLOSURE_MEMBER(callee))
         return value_init_err(ERROR("Type is not callable", VM_ERR_WRONG_TYPE), a);
 
@@ -182,8 +197,7 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
         upvalues = member->group.cell->value.upvalues;
         group = member->group;
     }
-    file = vm->files.arr[fn->loc.file].chars;
-    line = fn->loc.line;
+    callee_fn = fn;
     if (arg_count != fn->arity)
         return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
     if (vm->call_frames.size >= vm->max_call_frames)
@@ -207,8 +221,6 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
     value_t res = ret.is_some ? value_init_err(ret.value, a) : sv_vec_pop(vm->stack);
     arr_remove_n(&vm->stack, vm->stack.size - stack_offset, a);
     arr_remove_n(&vm->locals, vm->locals.size - locals_offset, a);
-    vm->ctx.file = caller_file;
-    vm->ctx.line = caller_line;
     return res;
 }
 #undef ERROR
@@ -221,8 +233,6 @@ value_t vm_call_name(vm_t* vm, value_t* args, uint8_t arg_count,
     if (!index.is_some)
         return value_init_err(error_fmt(VM_ERR_UNDEFINED_VARIABLE, NULL, 0, vm->ctx.alloc, "Undefined global"),
                               vm->ctx.alloc);
-    vm->ctx.file = NULL;
-    vm->ctx.line = 0;
     return vm_call_value(vm, vm->globals.arr[index.value], args, arg_count);
 }
 
@@ -262,7 +272,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 {
 #define TRY_NOT_NULL(v, err_msg) TRY_OR((v) != NULL, (void)0, err_msg)
 
-#define LOC() (frame->fn->chunk.locs.arr[(ip - code) - 1])
+#define LOC() chunk_loc(&frame->fn->chunk, (ip - code) - 1)
 #define LOC_FILE() (vm->files.arr[LOC().file].chars)
 
 #define TRY_OR(cond, cleanup, what) {                                                                         \
@@ -898,15 +908,14 @@ DISPATCH(); }
     const value_t* args = &stack.arr[stack.size - arg_count];                                                 \
     if (IS_NATIVE(value)) {                                                                                   \
         CALL_NATIVE(value);                                                                                   \
-        DISPATCH();                                                                                                \
+        DISPATCH();                                                                                           \
     }
 
 #define CALL_NATIVE(value) do {                                                                               \
     native_fn_t fn = AS_NATIVE(value);                                                                        \
     if (fn.arity != arg_count)                                                                                \
         ERR_WRONG_ARITY(sv_str_init(fn.name), fn.arity);                                                      \
-    vm->ctx.file = LOC_FILE();                                                                                \
-    vm->ctx.line = LOC().line;                                                                                \
+    frame->ip = ip - code;                                                                                    \
     vm->stack = stack;                                                                                        \
     value_t ret = fn.fn(args, arg_count, vm);                                                                 \
     stack = vm->stack;                                                                                        \

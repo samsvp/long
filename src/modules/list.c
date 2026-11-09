@@ -13,12 +13,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-static value_t oom_error(const vm_ctx_t* ctx)
+static value_t oom_error(const vm_t* vm)
 {
-    return value_init_err(error_fmt(VM_ERR_OOM, ctx->file, ctx->line, ctx->alloc, "OOM"), ctx->alloc);
+    return value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
 }
 
-#define CHECK_OOM(v) do { if ((v) == NULL) return oom_error(&vm->ctx); } while (0)
+#define CHECK_OOM(v) do { if ((v) == NULL) return oom_error(vm); } while (0)
 
 #define UNWRAP_ERR(v) do {                                                                                    \
     if (IS_ERR(v)) return v;                                                                                  \
@@ -26,7 +26,7 @@ static value_t oom_error(const vm_ctx_t* ctx)
 
 #define CHECK_LIST(v) do {                                                                                    \
     if (!IS_LIST(v))                                                                                          \
-        return bad_arg_type_error(v, VALUE_OBJ, OBJ_LIST, &vm->ctx);                                          \
+        return bad_arg_type_error(v, VALUE_OBJ, OBJ_LIST, vm);                                                \
 } while (0)
 
 static value_t wrap_list(list_t list, vm_t* vm)
@@ -35,7 +35,7 @@ static value_t wrap_list(list_t list, vm_t* vm)
     value_t ret = value_wrap_list(list, vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL) {
         ll_deinit(&list, vm->ctx.alloc);
-        return oom_error(&vm->ctx);
+        return oom_error(vm);
     }
     return ret;
 }
@@ -62,13 +62,13 @@ static value_t map_filter_list(value_t value, value_t fn, bool with_index, bool 
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(value, &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, vm);
 
     int64_t count = iterable_len(&iter);
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
     if (vec.arr == NULL)
-        return oom_error(&vm->ctx);
+        return oom_error(vm);
 
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
     double i = 0;
@@ -104,7 +104,7 @@ static value_t reduce_list(value_t value, value_t fn, value_t acc, bool with_ind
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(value, &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, vm);
 
     acc = value_borrow(acc);
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
@@ -179,18 +179,18 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
     iter_storage_t storage1;
     iterable_t iter1 = iter_init_no_borrow(args[0], &storage1);
     if (iter1.self == NULL)
-        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, vm);
     iter_storage_t storage2;
     iterable_t iter2 = iter_init_no_borrow(args[1], &storage2);
     if (iter2.self == NULL)
-        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_ITER, vm);
 
     int64_t l1_n = iterable_len(&iter1);
     int64_t l2_n = iterable_len(&iter2);
 
     if (l1_n != l2_n) {
         return value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
+                error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), a,
                           "Lists must have the same length, got %ld and %ld",
                           l1_n, l2_n),
                 a);
@@ -213,7 +213,7 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
 
     if (oom) {
         free_back_filled(&vec, a);
-        return oom_error(&vm->ctx);
+        return oom_error(vm);
     }
     return value_from_list(vec, vm);
 }
@@ -227,7 +227,7 @@ static value_t map_window(value_t val, value_t f, value_t window_len,
     double w = AS_NUMBER(window_len);
     if (w < 1 || w != floor(w))
         return value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, vm->ctx.alloc,
+                error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), vm->ctx.alloc,
                           "Window size must be a positive integer, got %g", w),
                 vm->ctx.alloc);
     int32_t w_size = w;
@@ -365,7 +365,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
     double k = AS_NUMBER(args[1]);
     if (k < 0 || k != floor(k))
         return value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
+                error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), a,
                           "Combination size must be a non-negative integer, got %g", k),
                 a);
 
@@ -382,7 +382,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
         sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, 1, a);
         if (vec.arr == NULL) {
             value_free(&empty, a);
-            return oom_error(&vm->ctx);
+            return oom_error(vm);
         }
         vec.arr[vec.size++] = empty;
         return value_from_list(vec, vm);
@@ -391,7 +391,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
     int64_t total = 1;
     for (int64_t i = 0; i < k_size; i++) {
         if (total > (int64_t)(SIZE_MAX / sizeof(value_t) / count))
-            return oom_error(&vm->ctx);
+            return oom_error(vm);
         total = total * (count - i) / (i + 1);
     }
 
@@ -440,7 +440,7 @@ oom:
     free_back_filled(&vec, a);
     sv_vec_deinit(&elems, a);
     sv_vec_deinit(&idx, a);
-    return oom_error(&vm->ctx);
+    return oom_error(vm);
 }
 
 static int value_num_cmp(void* ctx, const void* a, const void* b)
@@ -471,7 +471,7 @@ static int keyed_cmp(void* mctx, const void* a, const void* b)
 
     if (!IS_NUMBER(ta) || !IS_NUMBER(tb)) {
         value_t x = IS_NUMBER(ta) ? tb : ta;
-        error_t err = AS_ERR(bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, &ctx->vm->ctx));
+        error_t err = AS_ERR(bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, ctx->vm));
         ctx->err = sv_opt_some_t(error_t, err);
     }
 
@@ -569,7 +569,7 @@ static value_t min_max(const value_t* args, uint8_t n, bool is_max, vm_t* vm)
         value_t key = f == NULL ? x : vm_call_value(vm, *f, &x, 1);
         UNWRAP_ERR(key);
         if (!IS_NUMBER(key)) {
-            value_t err = bad_arg_type_error(key, VALUE_NUMBER, OBJ_LIST, &vm->ctx);
+            value_t err = bad_arg_type_error(key, VALUE_NUMBER, OBJ_LIST, vm);
             if (f != NULL)
                 value_free(&key, vm->ctx.alloc);
             return err;
@@ -602,7 +602,7 @@ value_t ntvl_count(const value_t* args, uint8_t n, vm_t* vm)
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, vm);
 
     double count = 0;
     sv_opt_t(value_t) next = sv_opt_none_t(value_t);
@@ -621,7 +621,7 @@ value_t ntvl_contains(const value_t* args, uint8_t n, vm_t* vm)
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, vm);
 
     bool found = false;
     sv_opt_t(value_t) next = sv_opt_none_t(value_t);
@@ -640,7 +640,7 @@ value_t ntvl_count_by(const value_t* args, uint8_t n, vm_t* vm)
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, vm);
 
     double count = 0;
     sv_opt_t(value_t) next = sv_opt_none_t(value_t);
@@ -662,17 +662,17 @@ static value_t uniq(value_t value, const value_t* f, vm_t* vm)
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(value, &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(value, VALUE_OBJ, OBJ_ITER, vm);
 
     int64_t count = iterable_len(&iter);
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
     if (vec.arr == NULL)
-        return oom_error(&vm->ctx);
+        return oom_error(vm);
     transient_hashmap_t seen = thm_init(count, a);
     if (seen.set.store.cell == NULL) {
         sv_vec_deinit(&vec, a);
-        return oom_error(&vm->ctx);
+        return oom_error(vm);
     }
 
     value_t err = value_nil;
@@ -691,7 +691,7 @@ static value_t uniq(value_t value, const value_t* f, vm_t* vm)
             value_free(&key, a);
         if (!ok) {
             value_free(&v.value, a);
-            err = oom_error(&vm->ctx);
+            err = oom_error(vm);
             break;
         }
 
@@ -732,13 +732,13 @@ value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)
     iter_storage_t storage;
     iterable_t iter = iter_init_no_borrow(args[0], &storage);
     if (iter.self == NULL)
-        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, &vm->ctx);
+        return bad_arg_type_error(args[0], VALUE_OBJ, OBJ_ITER, vm);
 
     int64_t count = iterable_len(&iter);
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
     if (vec.arr == NULL)
-        return oom_error(&vm->ctx);
+        return oom_error(vm);
 
     // iterable_next hands over an owned value, so the list takes it as is
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
@@ -754,7 +754,7 @@ value_t ntvl_join(const value_t* args, uint8_t n, vm_t* vm)
 
     CHECK_LIST(args[0]);
     if (!IS_STR(args[1]))
-        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_STR, &vm->ctx);
+        return bad_arg_type_error(args[1], VALUE_OBJ, OBJ_STR, vm);
 
     const sv_allocator_t* a = vm->ctx.alloc;
     sv_str_t joiner = AS_STR(args[1]);
@@ -766,13 +766,13 @@ value_t ntvl_join(const value_t* args, uint8_t n, vm_t* vm)
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
         if (!IS_STR(maybe_x.value)) {
             sv_strb_deinit(&b, a);
-            return bad_arg_type_error(maybe_x.value, VALUE_OBJ, OBJ_STR, &vm->ctx);
+            return bad_arg_type_error(maybe_x.value, VALUE_OBJ, OBJ_STR, vm);
         }
         sv_str_t s = AS_STR(maybe_x.value);
         if ((!first && sv_strb_add(&b, joiner.chars, joiner.size, a) < 0)
             || sv_strb_add(&b, s.chars, s.size, a) < 0) {
             sv_strb_deinit(&b, a);
-            return oom_error(&vm->ctx);
+            return oom_error(vm);
         }
         first = false;
     }
@@ -792,12 +792,12 @@ static value_t sum_string(list_t list, vm_t* vm)
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
         if (!IS_STR(maybe_x.value)) {
             sv_strb_deinit(&b, a);
-            return bad_arg_type_error(maybe_x.value, VALUE_OBJ, OBJ_STR, &vm->ctx);
+            return bad_arg_type_error(maybe_x.value, VALUE_OBJ, OBJ_STR, vm);
         }
         sv_str_t s = AS_STR(maybe_x.value);
         if (sv_strb_add(&b, s.chars, s.size, a) < 0) {
             sv_strb_deinit(&b, a);
-            return oom_error(&vm->ctx);
+            return oom_error(vm);
         }
     }
 
@@ -813,7 +813,7 @@ static value_t sum_number(list_t list, vm_t* vm)
     double acc = 0;
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
         if (!IS_NUMBER(maybe_x.value)) {
-            return bad_arg_type_error(maybe_x.value, VALUE_NUMBER, OBJ_STR, &vm->ctx);
+            return bad_arg_type_error(maybe_x.value, VALUE_NUMBER, OBJ_STR, vm);
         }
         acc += AS_NUMBER(maybe_x.value);
     }
@@ -836,5 +836,5 @@ value_t ntvl_sum(const value_t* args, uint8_t n, vm_t* vm)
         return sum_string(list, vm);
     if (IS_NUMBER(first))
         return sum_number(list, vm);
-    return bad_arg_type_error(first, VALUE_NUMBER, OBJ_STR, &vm->ctx);
+    return bad_arg_type_error(first, VALUE_NUMBER, OBJ_STR, vm);
 }
