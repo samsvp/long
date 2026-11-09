@@ -23,15 +23,15 @@ void check_limit(ctx_t* ctx, int64_t n, uint32_t max, const char* what, int64_t 
     if (n <= (int64_t)max)
         return;
     char msg[128];
-    snprintf(msg, sizeof(msg), "More than %" PRIu32 " %s at line %" PRId64, max, what, line);
-    ctx_fail(ctx, (int)GLOBAL_ERROR_TOO_MANY, msg);
+    snprintf(msg, sizeof(msg), "More than %" PRIu32 " %s", max, what);
+    ctx_fail(ctx, (int)GLOBAL_ERROR_TOO_MANY, line, msg);
 }
 
-_Noreturn static void error_redefined(ctx_t* ctx, const char* what, sv_str_t id)
+_Noreturn static void error_redefined(ctx_t* ctx, const char* what, sv_str_t id, int64_t line)
 {
     char msg[192];
     snprintf(msg, sizeof(msg), "%s '%.*s'", what, (int)id.size, id.chars);
-    ctx_fail(ctx, (int)GLOBAL_ERROR_REDEFINED, msg);
+    ctx_fail(ctx, (int)GLOBAL_ERROR_REDEFINED, line, msg);
 }
 
 int64_t names_count(transient_hashmap_t names)
@@ -125,7 +125,7 @@ uint32_t globals_add(globals_t* g, sv_str_t id, sv_str_t prefix, int64_t line, c
     uint32_t index = names_add(&g->name_indexes, name, &existed, ctx, &ctx->alloc);
     sv_str_deinit(&name, scratch);
     if (existed)
-        error_redefined(ctx, "Global redefined", id);
+        error_redefined(ctx, "Global redefined", id, line);
     return index;
 }
 

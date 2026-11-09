@@ -39,9 +39,9 @@ static const type_test_t TYPE_TESTS[] = {
     { "is-nil-list?", OP_IS_NIL_LIST },
 };
 
-_Noreturn static void compiler_error(ctx_t* ctx, compiler_error_kind kind, const char* msg)
+_Noreturn static void compiler_error(ctx_t* ctx, compiler_error_kind kind, int64_t line, const char* msg)
 {
-    ctx_fail(ctx, (int)kind, msg);
+    ctx_fail(ctx, (int)kind, line, msg);
 }
 
 _Noreturn static void compiler_oom(ctx_t* ctx, int64_t line)
@@ -119,16 +119,39 @@ static void compiler_abort(compiler_t* c, ctx_t* ctx)
     sv_vec_foreach(actor_vtable_t, vt, &c->actor_vtables)
         sv_free(&ctx->alloc, (char*)vt.name);
     sv_vec_deinit(&c->actor_vtables, &ctx->alloc);
+    sv_vec_foreach(sv_str_t, f, c->files)
+        sv_free(&ctx->alloc, (char*)f.chars);
+    sv_vec_deinit(c->files, &ctx->alloc);
 }
 
 _Noreturn static void compiler_file_error(ctx_t* ctx, const char* path, int64_t line, int err)
 {
-    char msg[FILENAME_MAX + 96];
-    if (line > 0)
-        snprintf(msg, sizeof(msg), "Cannot read file '%s' at line %" PRId64 ": %s", path, line, strerror(err));
-    else
-        snprintf(msg, sizeof(msg), "Cannot read file '%s': %s", path, strerror(err));
-    compiler_error(ctx, C_ERR_FILE, msg);
+    char msg[FILENAME_MAX + 64];
+    snprintf(msg, sizeof(msg), "Cannot read file '%s': %s", path, strerror(err));
+    compiler_error(ctx, C_ERR_FILE, line, msg);
+}
+
+static uint32_t enter_file(compiler_t* c, const char* path, int64_t line, ctx_t* ctx)
+{
+    char* name = sv_str_to_c_str(sv_str_init(path), &ctx->alloc);
+    if (name == NULL)
+        compiler_oom(ctx, line);
+    int success = 0;
+    sv_vec_push(c->files, sv_str_init(name), &success, &ctx->alloc);
+    if (!success) {
+        sv_free(&ctx->alloc, name);
+        compiler_oom(ctx, line);
+    }
+    uint32_t prev = c->builder.file;
+    c->builder.file = (uint32_t)(c->files->size - 1);
+    ctx->file = name;
+    return prev;
+}
+
+static void leave_file(compiler_t* c, uint32_t file, ctx_t* ctx)
+{
+    c->builder.file = file;
+    ctx->file = c->files->arr[file].chars;
 }
 
 /* Reads the whole file into a buffer from `a`, or fails the compilation. */
@@ -168,15 +191,15 @@ _Noreturn static void compiler_error_name(ctx_t* ctx, compiler_error_kind kind, 
                                           sv_str_t id)
 {
     char msg[192];
-    snprintf(msg, sizeof(msg), "%s '%.*s' at line %" PRId64, what, (int)id.size, id.chars, line);
-    compiler_error(ctx, kind, msg);
+    snprintf(msg, sizeof(msg), "%s '%.*s'", what, (int)id.size, id.chars);
+    compiler_error(ctx, kind, line, msg);
 }
 
 _Noreturn static void compiler_malformed(ctx_t* ctx, const char* what, int64_t line)
 {
     char msg[96];
-    snprintf(msg, sizeof(msg), "Malformed %s expression at line %" PRId64, what, line);
-    compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+    snprintf(msg, sizeof(msg), "Malformed %s expression", what);
+    compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, msg);
 }
 
 static void emit(compiler_t* c, ctx_t* ctx, uint8_t byte, int64_t line)
@@ -285,11 +308,8 @@ static int64_t jump_emit(ctx_t* ctx, sv_opt_t(int64_t) ji, int64_t line)
 static void patch_jump(compiler_t* c, ctx_t* ctx, int64_t ji, int64_t line)
 {
     int64_t offset = c->builder.fn.chunk.bytecode.size - ji;
-    if (offset > UINT16_MAX) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Jump too long at line %" PRId64, line);
-        compiler_error(ctx, C_ERR_JUMP_TOO_LONG, msg);
-    }
+    if (offset > UINT16_MAX)
+        compiler_error(ctx, C_ERR_JUMP_TOO_LONG, line, "Jump too long");
     fnb_patch_jump(&c->builder, ji, (uint16_t)offset);
 }
 
@@ -328,10 +348,7 @@ static int64_t sexpr_line(sexpr_t e)
 static sv_str_t expect_id(sexpr_t e, ctx_t* ctx)
 {
     if (e.tag != S_ATOM || e.atom.kind != TOKEN_LITERAL || e.atom.literal.kind != LITERAL_IDENTIFIER) {
-        int64_t line = sexpr_line(e);
-        char msg[96];
-        snprintf(msg, sizeof(msg), "Expected an identifier at line %" PRId64, line);
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, sexpr_line(e), "Expected an identifier");
     }
     return e.atom.literal.literal;
 }
@@ -564,12 +581,8 @@ static bool is_negative_number(sexpr_t e)
 static void bind_alias(compiler_t* c, sexpr_t pattern, sv_vec_t(sv_str_t)* seen,
                        int64_t line, ctx_t* ctx)
 {
-    if (!pattern_is_name(pattern.cons.arr[1]) && !pattern_is_name(pattern.cons.arr[2])) {
-        char msg[96];
-        snprintf(msg, sizeof(msg),
-                 "One side of '=' in a pattern must be a name at line %" PRId64, line);
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
-    }
+    if (!pattern_is_name(pattern.cons.arr[1]) && !pattern_is_name(pattern.cons.arr[2]))
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, "One side of '=' in a pattern must be a name");
     bind_pattern(c, pattern.cons.arr[1], seen, line, ctx);
     bind_pattern(c, pattern.cons.arr[2], seen, line, ctx);
 }
@@ -679,8 +692,8 @@ static uint32_t record_field_id(compiler_t* c, sv_str_t name, int64_t line, ctx_
     uint32_t id = names_add(c->record_fields, name, &existed, ctx, &ctx->alloc);
     if (id > UINT8_MAX) {
         char msg[96];
-        snprintf(msg, sizeof(msg), "More than %d record fields at line %" PRId64, UINT8_MAX + 1, line);
-        compiler_error(ctx, C_ERR_LIMIT_EXCEEDED, msg);
+        snprintf(msg, sizeof(msg), "More than %d record fields", UINT8_MAX + 1);
+        compiler_error(ctx, C_ERR_LIMIT_EXCEEDED, line, msg);
     }
     return id;
 }
@@ -870,11 +883,8 @@ static void compile_operator(compiler_t* c, operator_kind op, const sexpr_t* arg
         case OPERATOR_PIPE_FORWARD: compile_pipe(c, args, n, line, is_tail, ctx); return;
         case OPERATOR_DOT: compile_dot(c, args, n, line, ctx); return;
         case OPERATOR_DOUBLE_COLON: compile_double_colon(c, args, n, line, ctx); return;
-        case OPERATOR_LEFT_PAREN: {
-            char msg[96];
-            snprintf(msg, sizeof(msg), "Operator not implemented at line %" PRId64, line);
-            compiler_error(ctx, C_ERR_NOT_IMPLEMENTED, msg);
-        }
+        case OPERATOR_LEFT_PAREN:
+            compiler_error(ctx, C_ERR_NOT_IMPLEMENTED, line, "Operator not implemented");
     }
 
     for (int64_t i = 0; i < n; i++)
@@ -979,17 +989,12 @@ static void compile_map(compiler_t* c, const sexpr_t* args, int64_t n,
 
 _Noreturn static void reject_pattern_only(ctx_t* ctx, int64_t line)
 {
-    char msg[96];
-    snprintf(msg, sizeof(msg),
-             "'..' is only valid in a pattern or on the left of '=' at line %" PRId64, line);
-    compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+    compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, "'..' is only valid in a pattern or on the left of '='");
 }
 
 _Noreturn static void reject_shape(ctx_t* ctx, const char* what, int64_t line)
 {
-    char msg[128];
-    snprintf(msg, sizeof(msg), "%s at line %" PRId64, what, line);
-    compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+    compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, what);
 }
 
 static void compile_list(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
@@ -1107,6 +1112,8 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
     fc->globals = c->globals;
     fc->record_fields = c->record_fields;
     fc->atoms = c->atoms;
+    fc->files = c->files;
+    fc->builder.file = c->builder.file;
     fc->module_scope = c->module_scope;
     fc->outer_path = c->outer_path;
     c->child = fc;
@@ -1150,7 +1157,7 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
     if (fn->name.chars == NULL)
         compiler_oom(ctx, line);
     fn->arity = (uint8_t)params->cons.size;
-    fn->line = line;
+    fn->loc = (loc_t){ .line = (int32_t)line, .file = fc->builder.file };
     modules_deinit(fc, ctx);
     scopes_deinit(fc, ctx);
 }
@@ -1270,20 +1277,17 @@ static void check_actor_fn(const sexpr_t* fun, int64_t line, ctx_t* ctx)
         return;
 
     sv_str_t name = expect_id(fun->cons.arr[1], ctx);
-    char msg[128];
-    if (name.size == 0) {
-        snprintf(msg, sizeof(msg), "Actor functions must be named at line %" PRId64, line);
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
-    }
+    if (name.size == 0)
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, "Actor functions must be named");
 
     bool handler = sv_str_comp(name, sv_str_init("update"))
                                || sv_str_comp(name, sv_str_init("get"))
                                || sv_str_comp(name, sv_str_init("call"));
     const sexpr_t* params = &fun->cons.arr[fun->cons.size == 5 ? 3 : 2];
     if (handler && params->cons.size != 2) {
-        snprintf(msg, sizeof(msg), "Actor '%.*s' must take (state, msg) at line %" PRId64,
-                 (int)name.size, name.chars, line);
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Actor '%.*s' must take (state, msg)", (int)name.size, name.chars);
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, msg);
     }
 }
 
@@ -1291,11 +1295,8 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
 {
     if (n < 2)
         compiler_malformed(ctx, "actor", line);
-    if (c->locals != NULL) {
-        char msg[96];
-        snprintf(msg, sizeof(msg), "Actors must be defined at the top level at line %" PRId64, line);
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
-    }
+    if (c->locals != NULL)
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, "Actors must be defined at the top level");
 
     sv_str_t name = expect_id(args[0], ctx);
     expect_id(args[1], ctx);
@@ -1407,7 +1408,7 @@ static void compile_fail(compiler_t* c, int64_t line, ctx_t* ctx)
 {
     fail_target_t* target = c->fail_targets;
     if (target == NULL)
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, "No alternative to fail to");
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, "No alternative to fail to");
 
     emit_pop_locals(c, ctx, live_locals(c) - target->locals, line);
 
@@ -1581,11 +1582,8 @@ static void compile_literal(compiler_t* c, literal_t lit, int64_t line, ctx_t* c
 
 static void compile_atom(compiler_t* c, token_t token, ctx_t* ctx)
 {
-    if (token.kind != TOKEN_LITERAL) {
-        char msg[96];
-        snprintf(msg, sizeof(msg), "Unexpected token at line %" PRId64, token.line);
-        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, msg);
-    }
+    if (token.kind != TOKEN_LITERAL)
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, token.line, "Unexpected token");
     compile_literal(c, token.literal, token.line, ctx);
 }
 
@@ -1625,15 +1623,17 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
     bool is_new = !thm_get(c->modules.compiled_modules, path_key).is_some;
     if (is_new) {
         if (thm_get(c->modules.to_be_compiled_modules, path_key).is_some)
-            compiler_error(ctx, C_ERR_IMPORT_CICLE, "Import cicle detected");
+            compiler_error(ctx, C_ERR_IMPORT_CICLE, line, "Import cicle detected");
         module_put(&c->modules.to_be_compiled_modules, full_path, value_nil, line, ctx);
 
         char* source_code = read_file(ctx, import_full_path, line, c->scratch);
 
         const char* current_path = c->current_path;
         c->current_path = import_full_path;
+        uint32_t file = enter_file(c, import_full_path, line, ctx);
         if (compile_source(c, source_code, ctx))
             emit(c, ctx, OP_POP, 0);
+        leave_file(c, file, ctx);
         c->current_path = current_path;
 
         module_put(&c->modules.compiled_modules, full_path, value_nil, line, ctx);
@@ -1686,11 +1686,11 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
                 compile_import(c, cons + 1, a.line, ctx);
                 add_const(c, ctx, value_nil, a.line);
                 return;
-            case FN_MATCH: compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, "Unlowered match expression");
+            case FN_MATCH: compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, a.line, "Unlowered match expression");
             case FN_WHILE: {
                 char msg[96];
-                snprintf(msg, sizeof(msg), "Compiler '%s' not implemented at line %" PRId64, special_fn_text(a.fn), a.line);
-                compiler_error(ctx, C_ERR_NOT_IMPLEMENTED, msg);
+                snprintf(msg, sizeof(msg), "Compiler '%s' not implemented", special_fn_text(a.fn));
+                compiler_error(ctx, C_ERR_NOT_IMPLEMENTED, a.line, msg);
             }
         }
     }
@@ -1716,9 +1716,7 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
         return;
     }
 
-    char msg[96];
-    snprintf(msg, sizeof(msg), "Value is not callable at line %" PRId64, a.line);
-    compiler_error(ctx, C_ERR_NOT_CALLABLE, msg);
+    compiler_error(ctx, C_ERR_NOT_CALLABLE, a.line, "Value is not callable");
 }
 
 static void compile_sexpr(compiler_t* c, sexpr_t sexpr, bool is_tail, ctx_t* ctx)
@@ -1780,7 +1778,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     ctx->on_error = &on_error;
     switch (setjmp(on_error)) {
         case 1:
-            error_set_oom(&ctx->err, (int)C_ERR_OOM, 0, &ctx->alloc);
+            error_set_oom(&ctx->err, (int)C_ERR_OOM, ctx->file, 0, &ctx->alloc);
             /* fallthrough */
         case 2:
             if (compiler != NULL)
@@ -1790,9 +1788,12 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
 
     transient_hashmap_t* record_fields = sv_arena_calloc(arena, sizeof(transient_hashmap_t));
     transient_hashmap_t* atoms = sv_arena_calloc(arena, sizeof(transient_hashmap_t));
+    sv_vec_t(sv_str_t)* file_names = sv_arena_malloc(arena, sizeof(*file_names));
+    *file_names = sv_vec_init(sv_str_t);
     compiler_t* c = compiler_init("", arena, scratch, ctx);
     c->record_fields = record_fields;
     c->atoms = atoms;
+    c->files = file_names;
     compiler = c;
 
     /* Reserved for the ids map iteration builds its records with. */
@@ -1894,9 +1895,11 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
 
     bool has_value = false;
     for (int64_t i = 0; i < count; i++) {
+        ctx->file = NULL;
         char* source_code = read_file(ctx, files[i], 0, scratch);
         if (has_value)
             emit(c, ctx, OP_POP, 0);
+        enter_file(c, files[i], 0, ctx);
         c->current_path = files[i];
         has_value = compile_source(c, source_code, ctx);
     }
@@ -1906,6 +1909,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     vm_t vm = vm_init(fnb_build(&c->builder), opts.max_frames, c->globals, &ctx->alloc);
     vm.globals = c->global_values;
     vm.actor_vtables = c->actor_vtables;
+    vm.files = *c->files;
     vm.ctx.alloc = &ctx->alloc;
     modules_deinit(c, ctx);
 
@@ -1926,7 +1930,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     if ((n_fields > 0 && (vm.ctx.record_key_names == NULL || vm.ctx.record_fields.cell == NULL))
         || (n_atoms > 0 && vm.ctx.atom_names == NULL)
     ) {
-        error_set_oom(&ctx->err, (int)C_ERR_OOM, 0, &ctx->alloc);
+        error_set_oom(&ctx->err, (int)C_ERR_OOM, NULL, 0, &ctx->alloc);
         vm_deinit(&vm);
         return (vm_t){0};
     }
@@ -1940,6 +1944,7 @@ vm_t compile_files(const char** files, int64_t count, compile_opts_t opts, ctx_t
     sv_allocator_t scratch = sv_arena_allocator_init(&arena);
     vm_t vm = compile_guarded(files, count, opts, ctx, &arena, &scratch);
     ctx->on_error = NULL;
+    ctx->file = NULL;
     sv_arena_deinit(&arena);
     return vm;
 }

@@ -54,6 +54,9 @@ void vm_deinit(vm_t* vm)
     sv_vec_foreach(actor_vtable_t, vt, &vm->actor_vtables)
         sv_free(a, (char*)vt.name);
     sv_vec_deinit(&vm->actor_vtables, a);
+    sv_vec_foreach(sv_str_t, f, &vm->files)
+        sv_free(a, (char*)f.chars);
+    sv_vec_deinit(&vm->files, a);
 }
 
 static call_frame_t init_frame(fn_t* fn, int64_t locals_offset, int64_t stack_offset,
@@ -94,12 +97,14 @@ const char* vm_field_name(const vm_ctx_t* ctx, uint32_t id)
 
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm);
 
-#define ERROR(_msg, code) error_fmt(code, line, a, "%s", _msg)
+#define ERROR(_msg, code) error_fmt(code, file, line, a, "%s", _msg)
 value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg_count)
 {
     const sv_allocator_t* a = vm->ctx.alloc;
     // the caller's line until the callee is known, then its definition line
+    const char* const caller_file = vm->ctx.file;
     const int64_t caller_line = vm->ctx.line;
+    const char* file = caller_file;
     int64_t line = caller_line;
     if (!IS_CLOSURE(callee) && !IS_NATIVE(callee) && !IS_CLOSURE_MEMBER(callee))
         return value_init_err(ERROR("Type is not callable", VM_ERR_WRONG_TYPE), a);
@@ -124,7 +129,8 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
         upvalues = member->group.cell->value.upvalues;
         group = member->group;
     }
-    line = fn->line;
+    file = vm->files.arr[fn->loc.file].chars;
+    line = fn->loc.line;
     if (arg_count != fn->arity)
         return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
     if (vm->call_frames.size >= vm->max_call_frames)
@@ -148,6 +154,7 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
     value_t res = ret.is_some ? value_init_err(ret.value, a) : sv_vec_pop(vm->stack);
     arr_remove_n(&vm->stack, vm->stack.size - stack_offset, a);
     arr_remove_n(&vm->locals, vm->locals.size - locals_offset, a);
+    vm->ctx.file = caller_file;
     vm->ctx.line = caller_line;
     return res;
 }
@@ -159,8 +166,9 @@ value_t vm_call_name(vm_t* vm, value_t* args, uint8_t arg_count,
     sv_opt_t(uint32_t) index = globals_get(vm->globals_names_to_index, function_name, file_name, NULL,
                                            vm->ctx.alloc);
     if (!index.is_some)
-        return value_init_err(error_fmt(VM_ERR_UNDEFINED_VARIABLE, 0, vm->ctx.alloc, "Undefined global"),
+        return value_init_err(error_fmt(VM_ERR_UNDEFINED_VARIABLE, NULL, 0, vm->ctx.alloc, "Undefined global"),
                               vm->ctx.alloc);
+    vm->ctx.file = NULL;
     vm->ctx.line = 0;
     return vm_call_value(vm, vm->globals.arr[index.value], args, arg_count);
 }
@@ -178,7 +186,7 @@ sv_opt_t(error_t) vm_run(vm_t* vm)
     );
     if (!success)
         return sv_opt_some_t(error_t,
-            error_fmt(VM_ERR_OOM, 0, a, "Out of memory when creating the first call frame"));
+            error_fmt(VM_ERR_OOM, NULL, 0, a, "Out of memory when creating the first call frame"));
 
     return vm_run_frame(vm);
 }
@@ -201,12 +209,13 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 {
 #define TRY_NOT_NULL(v, err_msg) TRY_OR((v) != NULL, (void)0, err_msg)
 
-#define LINE() (frame->fn->chunk.lines.arr[(ip - code) - 1])
+#define LOC() (frame->fn->chunk.locs.arr[(ip - code) - 1])
+#define LOC_FILE() (vm->files.arr[LOC().file].chars)
 
 #define TRY_OR(cond, cleanup, what) {                                                                         \
     if (!(cond)) {                                                                                            \
         cleanup;                                                                                              \
-        err = error_fmt(VM_ERR_OOM, LINE(), a, "Out of memory %s", what);                                     \
+        err = error_fmt(VM_ERR_OOM, LOC_FILE(), LOC().line, a, "Out of memory %s", what);                     \
         goto error;                                                                                           \
     } }
 
@@ -225,7 +234,7 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 
 // cleanup runs after the message is built, since the message may read what it frees
 #define RAISE(code, cleanup, ...) do {                                                                        \
-    err = error_fmt(code, LINE(), a, __VA_ARGS__);                                                            \
+    err = error_fmt(code, LOC_FILE(), LOC().line, a, __VA_ARGS__);                                            \
     cleanup;                                                                                                  \
     goto error; } while (0)
 
@@ -843,7 +852,8 @@ DISPATCH(); }
     native_fn_t fn = AS_NATIVE(value);                                                                        \
     if (fn.arity != arg_count)                                                                                \
         ERR_WRONG_ARITY(sv_str_init(fn.name), fn.arity);                                                      \
-    vm->ctx.line = LINE();                                                                                    \
+    vm->ctx.file = LOC_FILE();                                                                                \
+    vm->ctx.line = LOC().line;                                                                                \
     vm->stack = stack;                                                                                        \
     value_t ret = fn.fn(args, arg_count, vm);                                                                 \
     stack = vm->stack;                                                                                        \

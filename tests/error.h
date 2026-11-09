@@ -7,9 +7,9 @@
 
 static inline void sv_test_error(sv_testing_t* t)
 {
-   error_t e = error_fmt(7, 3, &sv_gpa, "%s and %d", "text", 42);
+   error_t e = error_fmt(7, "f.long", 3, &sv_gpa, "%s and %d", "text", 42);
    sv_test_run(t, e.error_code == 7);
-   sv_test_run(t, sv_str_comp(e.msg, sv_str_init("Line 3: text and 42")));
+   sv_test_run(t, sv_str_comp(e.msg, sv_str_init("f.long:3: text and 42")));
    error_free(&e, &sv_gpa);
    sv_test_run(t, e.msg.size == 0);
    error_free(&e, &sv_gpa);

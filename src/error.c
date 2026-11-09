@@ -29,20 +29,32 @@ bool error_set(error_t* e, int code, const char* msg, const sv_allocator_t* a)
     return false;
 }
 
-bool error_set_oom(error_t* e, int code, int64_t line, const sv_allocator_t* a)
+static int write_loc(char* buf, int size, const char* file, int64_t line)
 {
-    char msg[64];
-    snprintf(msg, sizeof(msg), "Out of memory at line %" PRId64, line);
+    int at = 0;
+    if (file != NULL && line > 0)
+        at = snprintf(buf, size, ERROR_LOC_FMT, file, line);
+    else if (file != NULL)
+        at = snprintf(buf, size, "%s: ", file);
+    return at >= size ? size - 1 : at;
+}
+
+bool error_set_oom(error_t* e, int code, const char* file, int64_t line, const sv_allocator_t* a)
+{
+    char msg[FILENAME_MAX + 64];
+    int at = write_loc(msg, sizeof(msg), file, line);
+    snprintf(msg + at, sizeof(msg) - at, "Out of memory");
     return error_set(e, code, msg, a);
 }
 
-error_t error_fmt(int code, int64_t line, const sv_allocator_t* a, const char* fmt, ...)
+error_t error_fmt(int code, const char* file, int64_t line, const sv_allocator_t* a, const char* fmt, ...)
 {
     int bufsize = sizeof(char) * 256;
     char* buf = sv_malloc(a, bufsize);
     if (buf == NULL)
         return error_oom;
-    int at = snprintf(buf, bufsize, ERROR_LINE_FMT, line);
+
+    int at = write_loc(buf, bufsize, file, line);
 
     va_list args;
     va_start(args, fmt);

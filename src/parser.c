@@ -92,8 +92,8 @@ _Noreturn static void unexpected_token(ctx_t* ctx, token_t token, const char* wh
     token_text(token, got, sizeof(got), a);
 
     char msg[320];
-    snprintf(msg, sizeof(msg), "%s '%s' at line %" PRId64, what, got, token.line);
-    ctx_fail(ctx, (int)PARSER_ERROR_UNEXPECTED_TOKEN, msg);
+    snprintf(msg, sizeof(msg), "%s '%s'", what, got);
+    ctx_fail(ctx, (int)PARSER_ERROR_UNEXPECTED_TOKEN, token.line, msg);
 }
 
 static void push_sexpr(sv_vec_t(sexpr_t)* list, sexpr_t e, const sv_allocator_t* a)
@@ -140,11 +140,10 @@ static token_t parser_expect(scanner_t* s, ctx_t* ctx, token_pattern p, const sv
     token_text(pattern_token(p), want, sizeof(want), a);
 
     char msg[320];
-    snprintf(msg, sizeof(msg), "Unexpected token '%s' at line %" PRId64 ", expected '%s'",
-             got, token.line, want);
+    snprintf(msg, sizeof(msg), "Unexpected token '%s', expected '%s'", got, want);
     parser_error_kind kind =
         token.kind == TOKEN_EOF ? PARSER_ERROR_EOF : PARSER_ERROR_UNEXPECTED_TOKEN;
-    ctx_fail(ctx, (int)kind, msg);
+    ctx_fail(ctx, (int)kind, token.line, msg);
 }
 
 static token_t parser_expect_close(scanner_t* s, ctx_t* ctx, token_t open, token_pattern close,
@@ -165,11 +164,11 @@ static token_t parser_expect_close(scanner_t* s, ctx_t* ctx, token_t open, token
 
     char msg[320];
     snprintf(msg, sizeof(msg),
-             "Unclosed '%s' from line %" PRId64 ": expected '%s', got '%s' at line %" PRId64,
-             open_text, open.line, want, got, token.line);
+             "Unclosed '%s' from line %" PRId64 ": expected '%s', got '%s'",
+             open_text, open.line, want, got);
     parser_error_kind kind =
         token.kind == TOKEN_EOF ? PARSER_ERROR_EOF : PARSER_ERROR_UNEXPECTED_TOKEN;
-    ctx_fail(ctx, (int)kind, msg);
+    ctx_fail(ctx, (int)kind, token.line, msg);
 }
 
 static token_t parser_expect_literal(scanner_t* s, ctx_t* ctx, literal_kind literal_kind,
@@ -185,11 +184,10 @@ static token_t parser_expect_literal(scanner_t* s, ctx_t* ctx, literal_kind lite
     token_text(token, got, sizeof(got), a);
 
     char msg[320];
-    snprintf(msg, sizeof(msg), "Expected %s, got '%s' at line %" PRId64,
-             literal_name, got, token.line);
+    snprintf(msg, sizeof(msg), "Expected %s, got '%s'", literal_name, got);
     parser_error_kind kind =
         token.kind == TOKEN_EOF ? PARSER_ERROR_EOF : PARSER_ERROR_UNEXPECTED_TOKEN;
-    ctx_fail(ctx, (int)kind, msg);
+    ctx_fail(ctx, (int)kind, token.line, msg);
 }
 
 static token_t parser_expect_id(scanner_t* s, ctx_t* ctx, const sv_allocator_t* a)
@@ -540,7 +538,7 @@ static sexpr_t params_scrutinee(ctx_t* ctx, sexpr_t args, int64_t line, const sv
             unexpected_token(ctx, pattern_head(args.cons.arr[i]), "Expected a parameter name", a);
 
     if (args.cons.size == 0)
-        ctx_fail(ctx, (int)PARSER_ERROR_UNEXPECTED_TOKEN,
+        ctx_fail(ctx, (int)PARSER_ERROR_UNEXPECTED_TOKEN, line,
                  "A function with no parameters has nothing to match");
     if (args.cons.size == 1)
         return args.cons.arr[0];
@@ -589,9 +587,8 @@ static sexpr_t parse_fun_clauses(scanner_t* s, ctx_t* ctx, sexpr_t args, token_t
             int64_t line = pattern_head(pattern).line;
             char msg[128];
             snprintf(msg, sizeof(msg),
-                     "Clause must be a %" PRId64 " element tuple or a variable at line %" PRId64,
-                     args.cons.size, line);
-            ctx_fail(ctx, (int)PARSER_ERROR_UNEXPECTED_TOKEN, msg);
+                     "Clause must be a %" PRId64 " element tuple or a variable", args.cons.size);
+            ctx_fail(ctx, (int)PARSER_ERROR_UNEXPECTED_TOKEN, line, msg);
         }
 
         reject_alternative(s, ctx, a);
@@ -929,12 +926,8 @@ static sexpr_t parse_pattern_primary(scanner_t* s, ctx_t* ctx, const sv_allocato
     if (token.kind == TOKEN_ERROR)
         scanner_failed(ctx);
 
-    if (token.kind == TOKEN_EOF) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Expected pattern, got end of input at line %" PRId64,
-                 token.line);
-        ctx_fail(ctx, (int)PARSER_ERROR_EOF, msg);
-    }
+    if (token.kind == TOKEN_EOF)
+        ctx_fail(ctx, (int)PARSER_ERROR_EOF, token.line, "Expected pattern, got end of input");
 
     if (token.kind == TOKEN_LITERAL)
         return atom_sexpr(token);
@@ -1134,9 +1127,8 @@ static sexpr_t parse_form(scanner_t* s, ctx_t* ctx, token_t token, const sv_allo
         case FN_TUPLE:
         case FN_WHILE: {
             char msg[128];
-            snprintf(msg, sizeof(msg), "Parser '%s' is not implemented yet at line %" PRId64,
-                     special_fn_text(token.fn), token.line);
-            ctx_fail(ctx, (int)PARSER_ERROR_NOT_IMPLEMENTED, msg);
+            snprintf(msg, sizeof(msg), "Parser '%s' is not implemented yet", special_fn_text(token.fn));
+            ctx_fail(ctx, (int)PARSER_ERROR_NOT_IMPLEMENTED, token.line, msg);
         }
     }
     unexpected_token(ctx, token, "Unexpected token", a);
@@ -1148,12 +1140,8 @@ static sexpr_t parse_expr(scanner_t* s, ctx_t* ctx, uint8_t min_prec, const sv_a
     if (token.kind == TOKEN_ERROR)
         scanner_failed(ctx);
 
-    if (token.kind == TOKEN_EOF) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "Expected expression, got end of input at line %" PRId64,
-                 token.line);
-        ctx_fail(ctx, (int)PARSER_ERROR_EOF, msg);
-    }
+    if (token.kind == TOKEN_EOF)
+        ctx_fail(ctx, (int)PARSER_ERROR_EOF, token.line, "Expected expression, got end of input");
 
     sexpr_t lhs;
     if (token.kind == TOKEN_KEYWORD && token.keyword == KEYWORD_DO) {

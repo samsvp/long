@@ -11,8 +11,15 @@ sv_opt_def(uint32_t);
 sv_opt_def(int64_t);
 
 typedef struct {
+    int32_t line;
+    uint32_t file;
+} loc_t;
+
+sv_vec_def(loc_t);
+
+typedef struct {
     sv_vec_t(uint8_t) bytecode;
-    sv_vec_t(int64_t) lines;
+    sv_vec_t(loc_t) locs;
     sv_vec_t(value_t) constants;
     sv_vec_t(fn_t) functions;
 } chunk_t;
@@ -20,7 +27,7 @@ typedef struct {
 typedef struct fn_t {
     sv_str_t name;
     uint8_t arity;
-    int64_t line; // where the function was defined; 0 for the top level
+    loc_t loc; // where the function was defined; 0 for the top level
     chunk_t chunk;
 } fn_t;
 
@@ -34,6 +41,7 @@ void fn_deinit(fn_t*, const sv_allocator_t*);
 
 typedef struct {
     fn_t fn;
+    uint32_t file;
 } fn_builder_t;
 
 /**

@@ -14,12 +14,13 @@ typedef struct {
     sv_logger_t logger;
     error_t err;
     jmp_buf* on_error;  // where a compilation leaves on failure: 1 for out of memory, 2 when err is set
+    const char* file;
 } ctx_t;
 
 /**
  * Stores the error and leaves the compilation through on_error.
  */
-_Noreturn void ctx_fail(ctx_t*, int code, const char* msg);
+_Noreturn void ctx_fail(ctx_t*, int code, int64_t line, const char* msg);
 /**
  * As ctx_fail, with an out of memory message naming the line.
  */

@@ -33,8 +33,8 @@ actor Stack(init) do
     end
 
     fun call(state, msg)
-    | ([head, ..tail], :pop) do (head, tail)
-    | ([], :pop) do (nil, [])
+    | ([head, ..tail], :pop) do (tail, head)
+    | ([], :pop) do ([], nil)
     end
 end
 

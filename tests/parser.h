@@ -13,6 +13,7 @@ static inline ctx_t sv_test_parse_ctx(void)
       .alloc = sv_gpa,
       .logger = sv_std_logger,
       .err = { 0 },
+      .file = "p.long",
    };
 }
 
@@ -24,7 +25,7 @@ static inline bool sv_test_parse(const char* src, ctx_t* ctx, sv_arena_t* arena,
    arena->error_buffer = &on_error;
    switch (setjmp(on_error)) {
       case 1:
-         error_set_oom(&ctx->err, (int)PARSER_ERROR_OOM, 0, &ctx->alloc);
+         error_set_oom(&ctx->err, (int)PARSER_ERROR_OOM, NULL, 0, &ctx->alloc);
          /* fallthrough */
       case 2:
          ctx->on_error = NULL;
@@ -254,11 +255,11 @@ static inline void sv_test_parser_errors(sv_testing_t* t)
    sexpr_t e;
    sv_test_run(t, !sv_test_parse("(1 + 2", &ctx, &arena, &e, false));
    sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "')'"));
-   sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "line 1"));
+   sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "p.long:1: "));
    error_free(&ctx.err, &ctx.alloc);
 
    sv_test_run(t, !sv_test_parse("1 +\n@", &ctx, &arena, &e, false));
-   sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "line 2"));
+   sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "p.long:2: "));
    error_free(&ctx.err, &ctx.alloc);
    sv_arena_deinit(&arena);
 }
@@ -324,7 +325,7 @@ static inline void sv_test_parser_comments(sv_testing_t* t)
    sv_arena_t arena = sv_arena_init(1 << 12, &sv_gpa, NULL);
    sexpr_t e;
    sv_test_run(t, !sv_test_parse("# one\n# two\n1 +\n@", &ctx, &arena, &e, false));
-   sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "line 4"));
+   sv_test_run(t, sv_str_cstr_in(ctx.err.msg, "p.long:4: "));
    error_free(&ctx.err, &ctx.alloc);
    sv_arena_deinit(&arena);
 }

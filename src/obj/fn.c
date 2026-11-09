@@ -6,7 +6,7 @@ chunk_t chunk_init(void)
 {
     return (chunk_t){
         .bytecode = sv_vec_init(uint8_t),
-        .lines = sv_vec_init(int64_t),
+        .locs = sv_vec_init(loc_t),
         .constants = sv_vec_init(value_t),
         .functions = sv_vec_init(fn_t),
     };
@@ -19,7 +19,7 @@ void chunk_deinit(chunk_t* c, const sv_allocator_t* a)
         fn_deinit(&f, a);
     sv_vec_deinit(&c->functions, a);
     sv_vec_deinit(&c->bytecode, a);
-    sv_vec_deinit(&c->lines, a);
+    sv_vec_deinit(&c->locs, a);
 }
 
 void fn_deinit(fn_t* fn, const sv_allocator_t* a)
@@ -46,7 +46,8 @@ bool fnb_add_byte(fn_builder_t* b, uint8_t byte, int64_t line, const sv_allocato
     sv_vec_push(&b->fn.chunk.bytecode, byte, &success, a);
     if (!success)
         return false;
-    sv_vec_push(&b->fn.chunk.lines, line, &success, a);
+    loc_t loc = { .line = (int32_t)line, .file = b->file };
+    sv_vec_push(&b->fn.chunk.locs, loc, &success, a);
     return success;
 }
 

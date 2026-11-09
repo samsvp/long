@@ -47,6 +47,7 @@ typedef struct compiler_t {
     fn_builder_t builder;
     sv_vec_t(value_t) global_values;
     sv_vec_t(actor_vtable_t) actor_vtables;
+    sv_vec_t(sv_str_t)* files;
 
     sv_arena_t* arena;
     const sv_allocator_t* scratch;  // the arena as an allocator

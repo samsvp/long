@@ -1246,7 +1246,7 @@ sexpr_t match_compile(sexpr_t s, ctx_t* ctx, const sv_allocator_t* a)
     atom_keys_used = 0;
 
     if (s.cons.size <= CONDS_START)
-        ctx_fail(ctx, C_ERR_UNEXPECTED_SEXPR, "Invalid match expression. A match must have clauses.");
+        ctx_fail(ctx, C_ERR_UNEXPECTED_SEXPR, s.cons.arr[0].atom.line, "Invalid match expression. A match must have clauses.");
 
     // the lowering rewrites rows in place, so it works on copies of the clause list and its rows
     cons_t match = cons_init(s.cons.size, a);

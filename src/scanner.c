@@ -108,7 +108,7 @@ static token_t operator_of(const scanner_t* s, operator_kind op)
 
 static token_t error_token(scanner_t* s, ctx_t* ctx, scanner_error_kind kind, const char* msg)
 {
-    error_set(&ctx->err, (int)kind, msg, &ctx->alloc);
+    ctx->err = error_fmt((int)kind, ctx->file, s->line, &ctx->alloc, "%s", msg);
     return token_of(s, TOKEN_ERROR);
 }
 
@@ -123,16 +123,13 @@ static token_t slice_error_token(scanner_t* s, ctx_t* ctx, scanner_error_kind ki
     }
 
     char msg[256];
-    snprintf(msg, sizeof(msg), "%s '%.*s%s' at line %" PRId64,
-             what, (int)len, &s->source.chars[start], ellipsis, s->line);
+    snprintf(msg, sizeof(msg), "%s '%.*s%s'", what, (int)len, &s->source.chars[start], ellipsis);
     return error_token(s, ctx, kind, msg);
 }
 
 static token_t utf8_error_token(scanner_t* s, ctx_t* ctx)
 {
-    char msg[64];
-    snprintf(msg, sizeof(msg), "Invalid UTF-8 at line %" PRId64, s->line);
-    return error_token(s, ctx, SCANNER_ERROR_INVALID_UTF8, msg);
+    return error_token(s, ctx, SCANNER_ERROR_INVALID_UTF8, "Invalid UTF-8");
 }
 
 static token_t scan_string(scanner_t* s, ctx_t* ctx)
@@ -144,9 +141,7 @@ static token_t scan_string(scanner_t* s, ctx_t* ctx)
             break;
 
         if (c == CODEPOINT_EOF) {
-            char msg[64];
-            snprintf(msg, sizeof(msg), "Unclosed string at line %" PRId64, s->line);
-            return error_token(s, ctx, SCANNER_ERROR_UNCLOSED_STRING, msg);
+            return error_token(s, ctx, SCANNER_ERROR_UNCLOSED_STRING, "Unclosed string");
         }
 
         if (c == '"')

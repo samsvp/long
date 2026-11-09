@@ -5,7 +5,7 @@
 static value_t function_not_defined(const char* fn, const actor_t* actor, vm_t* vm)
 {
     return value_init_err(
-        error_fmt(VM_ERR_NOT_IMPLEMENTED, vm->ctx.line, vm->ctx.alloc,
+        error_fmt(VM_ERR_NOT_IMPLEMENTED, vm->ctx.file, vm->ctx.line, vm->ctx.alloc,
                  "Actor '%s' has no '%s' function", actor->vtable->name, fn),
         vm->ctx.alloc
     );
@@ -18,7 +18,7 @@ static value_t ret_not_tuple(value_t val, const actor_t* actor, vm_t* vm)
         str = sv_str_init("");
 
     value_t err = value_init_err(
-        error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc,
+        error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, vm->ctx.alloc,
                  "Actor '%s' call function must return a size two tuple, (ret, new_state). Got: %.*s",
                  actor->vtable->name, (int)str.size, str.chars),
         vm->ctx.alloc
@@ -32,7 +32,7 @@ static value_t ret_not_tuple(value_t val, const actor_t* actor, vm_t* vm)
 static value_t busy_error(const actor_t* actor, vm_t* vm)
 {
     return value_init_err(
-        error_fmt(VM_ERR_OP_UNSUPPORTED_ARGS, vm->ctx.line, vm->ctx.alloc,
+        error_fmt(VM_ERR_OP_UNSUPPORTED_ARGS, vm->ctx.file, vm->ctx.line, vm->ctx.alloc,
                   "Actor '%s' cannot be updated while it is updating", actor->vtable->name),
         vm->ctx.alloc);
 }

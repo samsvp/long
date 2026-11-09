@@ -7,7 +7,7 @@
 #include "std/option.h"
 
 /* How a message names its line; the formatted text follows. */
-#define ERROR_LINE_FMT "Line %" PRId64 ": "
+#define ERROR_LOC_FMT "%s:%" PRId64 ": "
 
 /**
  * A custom default error type to store error information.
@@ -38,12 +38,12 @@ bool error_set(error_t*, int code, const char* msg, const sv_allocator_t*);
  *
  * Note: the fact that an OOM error allocates is quite odd. We should fix this in the future.
  */
-bool error_set_oom(error_t*, int code, int64_t line, const sv_allocator_t*);
+bool error_set_oom(error_t*, int code, const char* file, int64_t line, const sv_allocator_t*);
 /**
- * Builds an error whose message is `Line N: ` followed by the formatted text, printf
+ * Builds an error whose message is `file:line: ` followed by the formatted text, printf
  * style. Text past 255 bytes is cut. The message is empty when it cannot be allocated.
  */
-error_t error_fmt(int code, int64_t line, const sv_allocator_t*, const char* fmt, ...);
+error_t error_fmt(int code, const char* file, int64_t line, const sv_allocator_t*, const char* fmt, ...);
 /**
  * Frees the message and leaves the error empty, so freeing twice is harmless.
  */

@@ -297,8 +297,8 @@ static inline void sv_test_compiler_indexing(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_runtime_err("[1][0 - 2]") == VM_ERR_KEY_NOT_FOUND);
    sv_test_run(t, sv_test_compiler_runtime_err("%{1: 2}[3]") == VM_ERR_KEY_NOT_FOUND);
    sv_test_run(t, sv_test_compiler_runtime_err("[1][\"a\"]") == VM_ERR_OP_UNSUPPORTED_ARGS);
-   sv_test_run(t, sv_test_compiler_runtime_msg("[1][0.5]", "Line 1: Index is not an integer: 0.5"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("5[0]", "Line 1: Type is not indexable: number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("[1][0.5]", SV_TEST_PATH ":1: Index is not an integer: 0.5"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("5[0]", SV_TEST_PATH ":1: Type is not indexable: number"));
 }
 
 static inline void sv_test_compiler_tuples(sv_testing_t* t)
@@ -340,8 +340,8 @@ static inline void sv_test_compiler_tuples(sv_testing_t* t)
    value_free(&inner, &sv_gpa);
 
    sv_test_run(t, sv_test_compiler_err("{x: 1, x: 2}") == C_ERR_REDEFINED);
-   sv_test_run(t, sv_test_compiler_runtime_msg("{x: 1}.y", "Line 1: Record has no field 'y'"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("t = 5\nt.x", "Line 2: Type has no fields: number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("{x: 1}.y", SV_TEST_PATH ":1: Record has no field 'y'"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("t = 5\nt.x", SV_TEST_PATH ":2: Type has no fields: number"));
 
    sv_test_run(t, sv_test_compiler_str("t = {x: 10, y: 20}\nt", "{x: 10, y: 20}"));
 }
@@ -386,7 +386,7 @@ static inline void sv_test_compiler_logic(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("s = \"ab\"\nif s + s == \"abab\" do 1 else 0 end", 1));
    sv_test_run(t, sv_test_compiler_runtime_err("\"a\" + 1") == VM_ERR_OP_UNSUPPORTED_ARGS);
    sv_test_run(t, sv_test_compiler_runtime_msg("1 + \"a\"",
-      "Line 1: Invalid operands for '+': number and string"));
+      SV_TEST_PATH ":1: Invalid operands for '+': number and string"));
 
    sv_test_run(t, sv_test_compiler_num("1; 2", 2));
    sv_test_run(t, sv_test_compiler_num("2;", 2));
@@ -398,20 +398,20 @@ static inline void sv_test_compiler_logic(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("fun add2(x, y) do x + y end\n1 |> add2(2)", 3));
    sv_test_run(t, sv_test_compiler_num("fun inc(x) do x + 1 end\n5 |> inc() |> inc()", 7));
    sv_test_run(t, sv_test_compiler_err("fun inc(x) do x + 1 end\n5 |> inc") == C_ERR_UNEXPECTED_SEXPR);
-   sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\n1 |> (2 + 3)", "Expected an identifier at line 3"));
-   sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\nfun f[zzz](y) do y end", "Undefined variable 'zzz' at line 3"));
+   sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\n1 |> (2 + 3)", SV_TEST_PATH ":3: Expected an identifier"));
+   sv_test_run(t, sv_test_compiler_err_msg("x = 1\n\nfun f[zzz](y) do y end", SV_TEST_PATH ":3: Undefined variable 'zzz'"));
 }
 
 static inline void sv_test_compiler_runtime_errors(sv_testing_t* t)
 {
-   sv_test_run(t, sv_test_compiler_runtime_msg("for x in 5 do x end", "Line 1: Type is not iterable: number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("for x in 5 do x end", SV_TEST_PATH ":1: Type is not iterable: number"));
    sv_test_run(t, sv_test_compiler_runtime_msg("fun f(x) do x end; f(1, 2)",
-      "Line 1: Wrong number of arguments for 'f': expected 1, got 2"));
+      SV_TEST_PATH ":1: Wrong number of arguments for 'f': expected 1, got 2"));
    sv_test_run(t, sv_test_compiler_runtime_msg("fun f(x) do x end\nr = { f: f }\n\nr.f(1, 2)",
-      "Line 4: Wrong number of arguments for 'f': expected 1, got 2"));
+      SV_TEST_PATH ":4: Wrong number of arguments for 'f': expected 1, got 2"));
    sv_test_run(t, sv_test_compiler_runtime_msg("fun f(x) do x end\nfun g() do f end\n\n(g())(1, 2)",
-      "Line 4: Wrong number of arguments for 'f': expected 1, got 2"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("[1] < 2", "Line 1: Invalid operands for '<': list and number"));
+      SV_TEST_PATH ":4: Wrong number of arguments for 'f': expected 1, got 2"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("[1] < 2", SV_TEST_PATH ":1: Invalid operands for '<': list and number"));
 }
 
 static inline void sv_test_compiler_error_messages(sv_testing_t* t)
@@ -419,19 +419,19 @@ static inline void sv_test_compiler_error_messages(sv_testing_t* t)
    /* A runtime error names its line, the operation and the types or values involved; the
     * cases that share a program with an older code check live next to that check. */
    sv_test_run(t, sv_test_compiler_runtime_msg("x = 1\n[1] < x",
-      "Line 2: Invalid operands for '<': list and number"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("-\"a\"", "Line 1: Invalid operand for '-': string"));
+      SV_TEST_PATH ":2: Invalid operands for '<': list and number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("-\"a\"", SV_TEST_PATH ":1: Invalid operand for '-': string"));
    sv_test_run(t, sv_test_compiler_runtime_msg("println(1, 2)",
-      "Line 1: Wrong number of arguments for 'println': expected 1, got 2"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("x = 5\nx(1)", "Line 2: Type is not callable: number"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("%{\"a\": 1}[\"b\"]", "Line 1: Key not found: b"));
-   sv_test_run(t, sv_test_compiler_runtime_msg("[1, 2][5]", "Line 1: Key not found: 5"));
+      SV_TEST_PATH ":1: Wrong number of arguments for 'println': expected 1, got 2"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("x = 5\nx(1)", SV_TEST_PATH ":2: Type is not callable: number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("%{\"a\": 1}[\"b\"]", SV_TEST_PATH ":1: Key not found: b"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("[1, 2][5]", SV_TEST_PATH ":1: Key not found: 5"));
    sv_test_run(t, sv_test_compiler_runtime_msg_frames("fun f(n) f(n + 1) + 1\nf(0)",
-      "Line 1: Call stack overflow", 100));
+      SV_TEST_PATH ":1: Call stack overflow", 100));
    sv_test_run(t, sv_test_compiler_runtime_msg("o = {x: 0}\n{z: 1, ..o}",
-      "Line 2: Record has no field 'z' to update"));
+      SV_TEST_PATH ":2: Record has no field 'z' to update"));
    sv_test_run(t, sv_test_compiler_runtime_msg("x = [1, 2, 3, 4, 5, 6, 7, 8]\nmatch x | [] do 0 end",
-      "Line 2: No clause matched: [1, 2, 3, 4, 5, 6, 7, 8]"));
+      SV_TEST_PATH ":2: No clause matched: [1, 2, 3, 4, 5, 6, 7, 8]"));
 
    /* An error raised through the embedding api reports the callee's definition line, or
     * line 0 when there is no callee to point at. */
@@ -443,11 +443,11 @@ static inline void sv_test_compiler_error_messages(sv_testing_t* t)
    value_t args[] = { sv_test_compiler_val(1), sv_test_compiler_val(2) };
    value_t bad_arity = vm_call_name(&vm, args, 2, sv_str_init("f"), sv_str_init(SV_TEST_PATH));
    sv_test_run(t, IS_ERR(bad_arity) && sv_str_comp(AS_ERR(bad_arity).msg,
-      sv_str_init("Line 2: Wrong number of arguments")));
+      sv_str_init(SV_TEST_PATH ":2: Wrong number of arguments")));
    value_free(&bad_arity, &sv_gpa);
    value_t undefined = vm_call_name(&vm, args, 1, sv_str_init("nope"), sv_str_init(SV_TEST_PATH));
    sv_test_run(t, IS_ERR(undefined) && sv_str_comp(AS_ERR(undefined).msg,
-      sv_str_init("Line 0: Undefined global")));
+      sv_str_init("Undefined global")));
    value_free(&undefined, &sv_gpa);
    vm_deinit(&vm);
 }
@@ -490,8 +490,8 @@ static inline void sv_test_compiler_native_calls(sv_testing_t* t)
       "fun inc(x) x + 1\nfun twice(x) apply(inc, apply(inc, x))\napply(twice, 1)", "3"));
    sv_test_run(t, sv_test_compiler_apply("apply(len, [1, 2])", "2"));
    sv_test_run(t, sv_test_compiler_apply("fun bad(x) x - nil\n\napply(bad, 1)",
-      "Line 1: Invalid operands for '-': number and nil"));
-   sv_test_run(t, sv_test_compiler_apply("\napply(1, 2)", "Line 2: Type is not callable"));
+      SV_TEST_PATH ":1: Invalid operands for '-': number and nil"));
+   sv_test_run(t, sv_test_compiler_apply("\napply(1, 2)", SV_TEST_PATH ":2: Type is not callable"));
 }
 
 /* List module natives that walk an iterable. These run under LeakSanitizer, so an
@@ -1274,22 +1274,22 @@ static inline void sv_test_compiler_destructure(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_runtime_err("{x, ..} = {y: 1}") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_err("fun f({x: a, ..}) a\nf({y: 1})") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_msg("{x, ..} = {y: 1}",
-      "Line 1: Value does not match the pattern: {y: 1}"));
+      SV_TEST_PATH ":1: Value does not match the pattern: {y: 1}"));
    sv_test_run(t, sv_test_compiler_num("fun f((a, (b, c))) a + b + c\nf((1, (2, 3)))", 6));
    sv_test_run(t, sv_test_compiler_runtime_msg("(a, b) = (1, 2, 3)",
-      "Line 1: Value does not match the pattern: (1, 2, 3)"));
+      SV_TEST_PATH ":1: Value does not match the pattern: (1, 2, 3)"));
    sv_test_run(t, sv_test_compiler_num("fun f([a, b, ..t]) a + b\nf([1, 2, 3])", 3));
    sv_test_run(t, sv_test_compiler_runtime_err("[a, b] = [1]") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_msg("[a, b] = [1]",
-      "Line 1: Value does not match the pattern: []"));
+      SV_TEST_PATH ":1: Value does not match the pattern: []"));
    sv_test_run(t, sv_test_compiler_num(
       "fun f(%{\"a\": v, \"b\": w, ..}) v + w\nf(%{\"a\": 1, \"b\": 2, \"c\": 3})", 3));
    sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v, ..} = %{\"b\": 1}") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_msg("%{\"a\": v, ..} = %{\"b\": 1}",
-      "Line 1: Value does not match the pattern: %{b: 1}"));
+      SV_TEST_PATH ":1: Value does not match the pattern: %{b: 1}"));
    sv_test_run(t, sv_test_compiler_runtime_err("[a] = 5") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_msg("[a] = [1, 2]",
-      "Line 1: Value does not match the pattern: [2]"));
+      SV_TEST_PATH ":1: Value does not match the pattern: [2]"));
    sv_test_run(t, sv_test_compiler_runtime_err("{x} = {x: 1, y: 2}") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_err("%{\"a\": v, ..} = 5") == VM_ERR_MATCH_FAILED);
 
@@ -1325,7 +1325,7 @@ static inline void sv_test_compiler_destructure(sv_testing_t* t)
 
    /* Every mismatch raises rather than yielding nil. */
    sv_test_run(t, sv_test_compiler_runtime_err("(a, b) = (1, 2, 3)\na") == VM_ERR_MATCH_FAILED);
-   sv_test_run(t, sv_test_compiler_runtime_msg("(a, b) = 5\na", "Line 1: Value does not match the pattern: 5"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("(a, b) = 5\na", SV_TEST_PATH ":1: Value does not match the pattern: 5"));
    sv_test_run(t, sv_test_compiler_runtime_err("[a, b] = [1, 2, 3]\na") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_err("[a, b] = [1]\na") == VM_ERR_MATCH_FAILED);
    sv_test_run(t, sv_test_compiler_runtime_err("{x: a} = {x: 5, y: 6}\na") == VM_ERR_MATCH_FAILED);
@@ -1344,7 +1344,7 @@ static inline void sv_test_compiler_destructure(sv_testing_t* t)
 
    /* A match with no matching clause raises rather than yielding nil; a match
     * with no clauses at all is rejected at compile time. */
-   sv_test_run(t, sv_test_compiler_runtime_msg("match 5 | 1 do 2 end", "Line 1: No clause matched: 5"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("match 5 | 1 do 2 end", SV_TEST_PATH ":1: No clause matched: 5"));
    sv_test_run(t, sv_test_compiler_err("match 5 end") == C_ERR_UNEXPECTED_SEXPR);
 
    /* An alias binds the whole value and goes on matching the other side, in either order. */
@@ -1382,7 +1382,7 @@ static inline void sv_test_compiler_spread(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_runtime_err("{a: 1, ..{x: 0}}") == VM_ERR_FIELD_NOT_FOUND);
    sv_test_run(t, sv_test_compiler_runtime_err("o = {a: 0, b: 0}\nq = {a: 0, c: 0}\n{b: 1, ..q}")
                == VM_ERR_FIELD_NOT_FOUND);
-   sv_test_run(t, sv_test_compiler_runtime_msg("{x: 1, ..5}", "Line 1: Record update needs a record, got number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("{x: 1, ..5}", SV_TEST_PATH ":1: Record update needs a record, got number"));
    sv_test_run(t, sv_test_compiler_runtime_err("{x: 1, ..[1]}") == VM_ERR_OP_UNSUPPORTED_ARGS);
    sv_test_run(t, sv_test_compiler_err("o = {x: 0}\n{x: 1, x: 2, ..o}") == C_ERR_REDEFINED);
    /* A pattern cannot bind a record or hashmap rest, and a list tail pattern is a name or a list. */
@@ -1407,7 +1407,7 @@ static inline void sv_test_compiler_spread(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("fun f() [9]\nl = [1, ..f()]\nl[1]", 9));
    sv_test_run(t, sv_test_compiler_num("xs = [3]\nys = [1, 2, ..xs]\nys[2]", 3));
    sv_test_run(t, sv_test_compiler_num("xs = [3]\nys = [1, ..xs]\nxs[0]", 3));
-   sv_test_run(t, sv_test_compiler_runtime_msg("[1, ..5]", "Line 1: Spread into a list needs a list, got number"));
+   sv_test_run(t, sv_test_compiler_runtime_msg("[1, ..5]", SV_TEST_PATH ":1: Spread into a list needs a list, got number"));
 }
 
 /* Every allocation failure reports C_ERR_OOM and leaks nothing. */
@@ -1477,9 +1477,9 @@ static inline void sv_test_compiler_missing_files(sv_testing_t* t)
 {
    sv_test_run(t, sv_test_compiler_err("import m(\"missing_mod.long\")") == C_ERR_FILE);
    sv_test_run(t, sv_test_compiler_err_msg("import m(\"missing_mod.long\")",
-      "Cannot read file 'build/test/missing_mod.long' at line 1: No such file or directory"));
+      SV_TEST_PATH ":1: Cannot read file 'build/test/missing_mod.long': No such file or directory"));
    sv_test_run(t, sv_test_compiler_err_msg("x = 1\nimport m(\"missing_mod.long\")\nx",
-      "Cannot read file 'build/test/missing_mod.long' at line 2: No such file or directory"));
+      SV_TEST_PATH ":2: Cannot read file 'build/test/missing_mod.long': No such file or directory"));
 
    ctx_t ctx = { .alloc = sv_gpa, .logger = sv_std_logger, .err = error_init() };
    vm_t vm = compile("build/test/missing.long", (compile_opts_t){ .max_frames = SV_TEST_MAX_FRAMES }, &ctx);

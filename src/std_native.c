@@ -30,7 +30,7 @@ void init_rand(void)
 
 value_t bad_arg_type_error(value_t v, value_kind expected_k, obj_kind expected_o, const vm_ctx_t* ctx)
 {
-    return value_init_err(error_fmt(VM_ERR_WRONG_TYPE, ctx->line, ctx->alloc,
+    return value_init_err(error_fmt(VM_ERR_WRONG_TYPE, ctx->file, ctx->line, ctx->alloc,
                                     "Wrong type of argument: expected %s, got %s",
                                     value_kind_str(expected_k, expected_o), value_type_name(v)),
                           ctx->alloc);
@@ -87,7 +87,7 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
 
         if (i == fmt.size) {
             const char* err_msg = "Percent simbol '%%' without value descriptor. Use a double '%%%%' if you want to print '%%'";
-            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a, err_msg), a);
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a, err_msg), a);
             goto done;
         }
 
@@ -99,14 +99,14 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
             continue;
         }
         if (c != 'v') {
-            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
                                            "Unknown value descriptor '%c'", c), a);
             goto done;
         }
 
         sv_opt_t(value_t) v = iterable_next(&iter, a);
         if (!v.is_some) {
-            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
+            ret = value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
                                            "No value left to print"), a);
             goto done;
         }
@@ -119,7 +119,7 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
         goto done;
 
 oom:
-    ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, a, "OOM"), a);
+    ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, a, "OOM"), a);
 done:
     return ret;
 }
@@ -148,7 +148,7 @@ value_t ntv_sprintf(const value_t* values, uint8_t n, vm_t* vm)
     }
     ret = value_init_str_own(sv_strb_to_str(&b), vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL)
-        return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+        return value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
     return ret;
 }
 
@@ -174,7 +174,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     char c;
     while (c = getchar(), c != '\n' && c != EOF) {
         if (sv_strb_add_char(&b, c, vm->ctx.alloc) == -1) {
-            ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+            ret = value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
             goto ret;
         }
     }
@@ -182,7 +182,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     sv_str_t str = sv_strb_to_str(&b);
     ret = value_init_str(str, vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL)
-        value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+        value_init_err(error_fmt(VM_ERR_OOM, vm->ctx.file, vm->ctx.line, vm->ctx.alloc, "OOM"), vm->ctx.alloc);
 
 ret:
     sv_strb_deinit(&b, vm->ctx.alloc);

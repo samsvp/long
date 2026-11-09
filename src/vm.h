@@ -2,7 +2,6 @@
 #define LONG_VM_H
 
 #include <stdint.h>
-#include "error.h"
 #include "std/logger.h"
 #include "value.h"
 #include "obj.h"
@@ -21,6 +20,7 @@ typedef sv_vec_t(value_t) value_arr;
 typedef struct vm_ctx_t {
     const sv_allocator_t* alloc;
     sv_logger_t logger;
+    const char* file;
     int64_t line; // the line of the instruction being executed, for the errors natives build
 
     hashmap_t record_fields;
@@ -56,6 +56,7 @@ typedef struct vm_t {
     value_arr stack;
 
     sv_vec_t(actor_vtable_t) actor_vtables;
+    sv_vec_t(sv_str_t) files;
 
     vm_ctx_t ctx;
 } vm_t;

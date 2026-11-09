@@ -15,7 +15,7 @@
 
 static value_t oom_error(const vm_ctx_t* ctx)
 {
-    return value_init_err(error_fmt(VM_ERR_OOM, ctx->line, ctx->alloc, "OOM"), ctx->alloc);
+    return value_init_err(error_fmt(VM_ERR_OOM, ctx->file, ctx->line, ctx->alloc, "OOM"), ctx->alloc);
 }
 
 #define CHECK_OOM(v) do { if ((v) == NULL) return oom_error(&vm->ctx); } while (0)
@@ -190,7 +190,7 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
 
     if (l1_n != l2_n) {
         return value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
+                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
                           "Lists must have the same length, got %ld and %ld",
                           l1_n, l2_n),
                 a);
@@ -227,7 +227,7 @@ static value_t map_window(value_t val, value_t f, value_t window_len,
     double w = AS_NUMBER(window_len);
     if (w < 1 || w != floor(w))
         return value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, vm->ctx.alloc,
+                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, vm->ctx.alloc,
                           "Window size must be a positive integer, got %g", w),
                 vm->ctx.alloc);
     int32_t w_size = w;
@@ -365,7 +365,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
     double k = AS_NUMBER(args[1]);
     if (k < 0 || k != floor(k))
         return value_init_err(
-                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.line, a,
+                error_fmt(VM_ERR_WRONG_TYPE, vm->ctx.file, vm->ctx.line, a,
                           "Combination size must be a non-negative integer, got %g", k),
                 a);
 
