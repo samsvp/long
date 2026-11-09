@@ -13,12 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static value_t oom_error(const vm_t* vm)
-{
-    return value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
-}
-
-#define CHECK_OOM(v) do { if ((v) == NULL) return oom_error(vm); } while (0)
+#define CHECK_OOM(v) do { if ((v) == NULL) return VALUE_OOM; } while (0)
 
 #define UNWRAP_ERR(v) do {                                                                                    \
     if (IS_ERR(v)) return v;                                                                                  \
@@ -35,7 +30,7 @@ static value_t wrap_list(list_t list, vm_t* vm)
     value_t ret = value_wrap_list(list, vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL) {
         ll_deinit(&list, vm->ctx.alloc);
-        return oom_error(vm);
+        return VALUE_OOM;
     }
     return ret;
 }
@@ -68,7 +63,7 @@ static value_t map_filter_list(value_t value, value_t fn, bool with_index, bool 
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
     if (vec.arr == NULL)
-        return oom_error(vm);
+        return VALUE_OOM;
 
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
     double i = 0;
@@ -213,7 +208,7 @@ value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
 
     if (oom) {
         free_back_filled(&vec, a);
-        return oom_error(vm);
+        return VALUE_OOM;
     }
     return value_from_list(vec, vm);
 }
@@ -382,7 +377,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
         sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, 1, a);
         if (vec.arr == NULL) {
             value_free(&empty, a);
-            return oom_error(vm);
+            return VALUE_OOM;
         }
         vec.arr[vec.size++] = empty;
         return value_from_list(vec, vm);
@@ -391,7 +386,7 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
     int64_t total = 1;
     for (int64_t i = 0; i < k_size; i++) {
         if (total > (int64_t)(SIZE_MAX / sizeof(value_t) / count))
-            return oom_error(vm);
+            return VALUE_OOM;
         total = total * (count - i) / (i + 1);
     }
 
@@ -440,7 +435,7 @@ oom:
     free_back_filled(&vec, a);
     sv_vec_deinit(&elems, a);
     sv_vec_deinit(&idx, a);
-    return oom_error(vm);
+    return VALUE_OOM;
 }
 
 static int value_num_cmp(void* ctx, const void* a, const void* b)
@@ -454,25 +449,31 @@ static int value_num_cmp(void* ctx, const void* a, const void* b)
 typedef struct {
     vm_t* vm;
     value_t f;
-    sv_opt_t(error_t) err;
+    value_t err;
 } sort_ctx_t;
 
 static int keyed_cmp(void* mctx, const void* a, const void* b)
 {
     sort_ctx_t* ctx = mctx;
-    value_t ta = vm_call_value(ctx->vm, ctx->f, a, 1);
-    value_t tb = vm_call_value(ctx->vm, ctx->f, b, 1);
-    if (IS_ERR(ta))
-        ctx->err = sv_opt_some_t(error_t, AS_ERR(ta));
-    if (IS_ERR(tb))
-        ctx->err = sv_opt_some_t(error_t, AS_ERR(tb));
-    if (ctx->err.is_some)
+    if (!IS_NIL(ctx->err))
         return 0;
 
+    value_t ta = vm_call_value(ctx->vm, ctx->f, a, 1);
+    if (IS_ERR(ta)) {
+        ctx->err = ta;
+        return 0;
+    }
+    value_t tb = vm_call_value(ctx->vm, ctx->f, b, 1);
+    if (IS_ERR(tb)) {
+        value_free(&ta, ctx->vm->ctx.alloc);
+        ctx->err = tb;
+        return 0;
+    }
     if (!IS_NUMBER(ta) || !IS_NUMBER(tb)) {
-        value_t x = IS_NUMBER(ta) ? tb : ta;
-        error_t err = AS_ERR(bad_arg_type_error(x, VALUE_NUMBER, OBJ_LIST, ctx->vm));
-        ctx->err = sv_opt_some_t(error_t, err);
+        ctx->err = bad_arg_type_error(IS_NUMBER(ta) ? tb : ta, VALUE_NUMBER, OBJ_LIST, ctx->vm);
+        value_free(&ta, ctx->vm->ctx.alloc);
+        value_free(&tb, ctx->vm->ctx.alloc);
+        return 0;
     }
 
     double x = AS_NUMBER(ta);
@@ -489,6 +490,7 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
         return value_borrow(value);
 
     sv_vec_t(value_t) vs = sv_vec_init_capacity(value_t, count, vm->ctx.alloc);
+    CHECK_OOM(vs.arr);
 
     ll_iter_t iter = ll_iter_init_no_borrow(l);
     sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
@@ -500,9 +502,13 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
     sort_ctx_t ctx = {
         .vm = vm,
         .f = f != NULL ? *f : value_nil,
-        .err = sv_opt_none,
+        .err = value_nil,
     };
     stable_sort(vs.arr, vs.size, sizeof(value_t), &ctx, f == NULL ? value_num_cmp : keyed_cmp);
+    if (!IS_NIL(ctx.err)) {
+        value_arr_deinit(&vs, vm->ctx.alloc);
+        return ctx.err;
+    }
     return value_from_list(vs, vm);
 }
 
@@ -668,11 +674,11 @@ static value_t uniq(value_t value, const value_t* f, vm_t* vm)
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
     if (vec.arr == NULL)
-        return oom_error(vm);
+        return VALUE_OOM;
     transient_hashmap_t seen = thm_init(count, a);
     if (seen.set.store.cell == NULL) {
         sv_vec_deinit(&vec, a);
-        return oom_error(vm);
+        return VALUE_OOM;
     }
 
     value_t err = value_nil;
@@ -691,7 +697,7 @@ static value_t uniq(value_t value, const value_t* f, vm_t* vm)
             value_free(&key, a);
         if (!ok) {
             value_free(&v.value, a);
-            err = oom_error(vm);
+            err = VALUE_OOM;
             break;
         }
 
@@ -738,7 +744,7 @@ value_t ntvl_rev(const value_t* args, uint8_t n, vm_t* vm)
 
     sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, a);
     if (vec.arr == NULL)
-        return oom_error(vm);
+        return VALUE_OOM;
 
     // iterable_next hands over an owned value, so the list takes it as is
     sv_opt_t(value_t) v = sv_opt_none_t(value_t);
@@ -772,7 +778,7 @@ value_t ntvl_join(const value_t* args, uint8_t n, vm_t* vm)
         if ((!first && sv_strb_add(&b, joiner.chars, joiner.size, a) < 0)
             || sv_strb_add(&b, s.chars, s.size, a) < 0) {
             sv_strb_deinit(&b, a);
-            return oom_error(vm);
+            return VALUE_OOM;
         }
         first = false;
     }
@@ -797,7 +803,7 @@ static value_t sum_string(list_t list, vm_t* vm)
         sv_str_t s = AS_STR(maybe_x.value);
         if (sv_strb_add(&b, s.chars, s.size, a) < 0) {
             sv_strb_deinit(&b, a);
-            return oom_error(vm);
+            return VALUE_OOM;
         }
     }
 

@@ -35,11 +35,9 @@ void error_reset(error_t*);
  */
 bool error_set(error_t*, int code, const char* msg, const sv_allocator_t*);
 /**
- * Stores an out of memory error naming the line. Always returns false.
- *
- * Note: the fact that an OOM error allocates is quite odd. We should fix this in the future.
+ * Returns the out of memory error with the given code. It does not allocate.
  */
-bool error_set_oom(error_t*, int code, const char* file, int64_t line, const sv_allocator_t*);
+error_t error_oom(int code);
 /**
  * Builds an error whose message is `file:line: ` followed by the formatted text, printf
  * style. Text past 255 bytes is cut. The message is empty when it cannot be allocated.

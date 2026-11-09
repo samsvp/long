@@ -119,7 +119,7 @@ static value_t format(const value_t* args, sv_str_builder* b, vm_t* vm)
         goto done;
 
 oom:
-    ret = value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), a, "OOM"), a);
+    ret = VALUE_OOM;
 done:
     return ret;
 }
@@ -148,7 +148,7 @@ value_t ntv_sprintf(const value_t* values, uint8_t n, vm_t* vm)
     }
     ret = value_init_str_own(sv_strb_to_str(&b), vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL)
-        return value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+        return VALUE_OOM;
     return ret;
 }
 
@@ -174,7 +174,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     char c;
     while (c = getchar(), c != '\n' && c != EOF) {
         if (sv_strb_add_char(&b, c, vm->ctx.alloc) == -1) {
-            ret = value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+            ret = VALUE_OOM;
             goto ret;
         }
     }
@@ -182,7 +182,7 @@ value_t ntv_input(const value_t* values, uint8_t n, vm_t* vm)
     sv_str_t str = sv_strb_to_str(&b);
     ret = value_init_str(str, vm->ctx.alloc);
     if (AS_OBJ(ret).cell == NULL)
-        value_init_err(error_fmt(VM_ERR_OOM, vm_file(vm), vm_line(vm), vm->ctx.alloc, "OOM"), vm->ctx.alloc);
+        ret = VALUE_OOM;
 
 ret:
     sv_strb_deinit(&b, vm->ctx.alloc);

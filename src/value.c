@@ -10,8 +10,6 @@
 #include "obj/user_value.h"
 #include "vm.h"
 
-#define ERR_VALUE value_obj((sv_rc_t(obj_t)){ 0 })
-
 void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
 {
     sv_vec_foreach(value_t, v, arr)
@@ -96,7 +94,7 @@ static value_t obj_wrap(obj_t o, const sv_allocator_t* a)
 {
     sv_rc_t(obj_t) rc = sv_rc_init(obj_t, o, obj_free, a);
     if (rc.cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
     return value_obj(rc);
 }
 
@@ -104,7 +102,7 @@ value_t value_init_list(const value_t* vs, int64_t len, const sv_allocator_t* a)
 {
     list_t list = ll_init(vs, len, a);
     if (list.cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_LIST, .list = list }, a);
     if (AS_OBJ(v).cell == NULL)
@@ -116,7 +114,7 @@ value_t value_init_list_filter(const value_t* vs, int64_t len, const sv_allocato
 {
     list_t list = ll_init_filter(vs, len, a);
     if (list.cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_LIST, .list = list }, a);
     if (AS_OBJ(v).cell == NULL)
@@ -141,7 +139,10 @@ value_t value_wrap_map(hashmap_t map, const sv_allocator_t* a)
 
 value_t value_init_err(error_t err, const sv_allocator_t* a)
 {
-    return obj_wrap((obj_t){ .kind = OBJ_ERR, .err = err }, a);
+    value_t v = obj_wrap((obj_t){ .kind = OBJ_ERR, .err = err }, a);
+    if (AS_OBJ(v).cell == NULL)
+        error_free(&err, a);
+    return v;
 }
 
 value_t value_wrap_actor(actor_t* actor, const sv_allocator_t* a)
@@ -158,7 +159,7 @@ value_t value_init_iter(value_t from, const sv_allocator_t* a)
 {
     iterable_t iter = iter_init(from, a);
     if (iter.self == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
     value_t v = obj_wrap((obj_t){ .kind = OBJ_ITER, .iter = iter }, a);
     if (AS_OBJ(v).cell == NULL)
         iter_deinit(&iter, a);
@@ -171,7 +172,7 @@ value_t value_init_closure(fn_t* function, const value_t* ups, int64_t n, const 
     if (n > 0) {
         cls.upvalues = (sv_vec_t(value_t))sv_vec_init_capacity(value_t, n, a);
         if (cls.upvalues.arr == NULL)
-            return ERR_VALUE;
+            return VALUE_OOM;
         cls.upvalues.size = n;
         for (int64_t i = 0; i < n; i++)
             cls.upvalues.arr[i] = value_borrow(ups[i]);
@@ -205,7 +206,7 @@ value_t value_init_str(sv_str_t s, const sv_allocator_t* a)
 {
     sv_str_t copy = sv_str_copy(s, a);
     if (copy.chars == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
     return value_init_str_own(copy, a);
 }
 
@@ -213,7 +214,7 @@ value_t value_init_map(const value_t* vs, int64_t n_pairs, const sv_allocator_t*
 {
     hashmap_t map = map_init(vs, n_pairs * 2, a);
     if (map.cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_MAP, .map = map }, a);
     if (AS_OBJ(v).cell == NULL)
@@ -225,12 +226,12 @@ value_t value_init_record(const value_t* vs, uint8_t n, const sv_allocator_t* a)
 {
     value_t v = obj_wrap((obj_t){ .kind = OBJ_RECORD, .record = {0} }, a);
     if (AS_OBJ(v).cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
 
     record_t record = record_init(vs, n, a);
     if (record.items == NULL) {
         value_free(&v, a);
-        return ERR_VALUE;
+        return VALUE_OOM;
     }
 
     AS_OBJ(v).cell->value.record = record;
@@ -241,12 +242,12 @@ value_t value_init_tuple(const value_t* vs, uint8_t n, const sv_allocator_t* a)
 {
     value_t v = obj_wrap((obj_t){ .kind = OBJ_TUPLE, .tuple = {0} }, a);
     if (AS_OBJ(v).cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
 
     tuple_t tuple = tuple_init(vs, n, a);
     if (tuple.items == NULL) {
         value_free(&v, a);
-        return ERR_VALUE;
+        return VALUE_OOM;
     }
 
     AS_OBJ(v).cell->value.tuple = tuple;
@@ -433,6 +434,6 @@ value_t value_init_user_value(void* ptr, const user_value_vtable_t* vtable,
 
     value_t v = obj_wrap((obj_t){ .kind = OBJ_USER_VALUE, .uservalue = uv }, a);
     if (AS_OBJ(v).cell == NULL)
-        return ERR_VALUE;
+        return VALUE_OOM;
     return v;
 }

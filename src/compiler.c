@@ -21,7 +21,7 @@
 
 static void compile_sexpr(compiler_t* c, sexpr_t sexpr, bool is_tail, ctx_t* ctx);
 static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx_t* ctx);
-static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, int64_t line, ctx_t* ctx);
+static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, ctx_t* ctx);
 
 typedef struct {
     const char* name;
@@ -44,9 +44,9 @@ _Noreturn static void compiler_error(ctx_t* ctx, compiler_error_kind kind, int64
     ctx_fail(ctx, (int)kind, line, msg);
 }
 
-_Noreturn static void compiler_oom(ctx_t* ctx, int64_t line)
+_Noreturn static void compiler_oom(ctx_t* ctx)
 {
-    ctx_fail_oom(ctx, (int)C_ERR_OOM, line);
+    ctx_fail_oom(ctx, (int)C_ERR_OOM);
 }
 
 /**
@@ -64,7 +64,7 @@ static compiler_t* compiler_init(const char* base_path, sv_arena_t* arena, const
     ) {
         thm_deinit(&modules.compiled_modules, &ctx->alloc);
         thm_deinit(&modules.to_be_compiled_modules, &ctx->alloc);
-        compiler_oom(ctx, 0);
+        compiler_oom(ctx);
     }
 
     *c = (compiler_t){
@@ -131,16 +131,16 @@ _Noreturn static void compiler_file_error(ctx_t* ctx, const char* path, int64_t 
     compiler_error(ctx, C_ERR_FILE, line, msg);
 }
 
-static uint32_t enter_file(compiler_t* c, const char* path, int64_t line, ctx_t* ctx)
+static uint32_t enter_file(compiler_t* c, const char* path, ctx_t* ctx)
 {
     char* name = sv_str_to_c_str(sv_str_init(path), &ctx->alloc);
     if (name == NULL)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     int success = 0;
     sv_vec_push(c->files, sv_str_init(name), &success, &ctx->alloc);
     if (!success) {
         sv_free(&ctx->alloc, name);
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     }
     uint32_t prev = c->builder.file;
     c->builder.file = (uint32_t)(c->files->size - 1);
@@ -173,7 +173,7 @@ static char* read_file(ctx_t* ctx, const char* path, int64_t line, const sv_allo
     char* buffer = sv_malloc(a, (size_t)size + 1);
     if (buffer == NULL) {
         fclose(file);
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     }
     size_t read = fread(buffer, sizeof(char), (size_t)size, file);
     if (read < (size_t)size) {
@@ -205,20 +205,20 @@ _Noreturn static void compiler_malformed(ctx_t* ctx, const char* what, int64_t l
 static void emit(compiler_t* c, ctx_t* ctx, uint8_t byte, int64_t line)
 {
     if (!fnb_add_byte(&c->builder, byte, line, &ctx->alloc))
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
 }
 
 static void emit2(compiler_t* c, ctx_t* ctx, uint8_t b1, uint8_t b2, int64_t line)
 {
     if (!fnb_add_bytes(&c->builder, b1, b2, line, &ctx->alloc))
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
 }
 
-static void add_const(compiler_t* c, ctx_t* ctx, value_t v, int64_t line)
+static void add_const(compiler_t* c, ctx_t* ctx, value_t v)
 {
     if (!fnb_add_constant(&c->builder, v, &ctx->alloc).is_some) {
         value_free(&v, &ctx->alloc);
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     }
 }
 
@@ -237,7 +237,7 @@ static bool compile_top(compiler_t* c, sexpr_t sexpr, bool has_value, int64_t li
     if (has_value)
         emit(c, ctx, OP_POP, line);
     if (import)
-        add_const(c, ctx, value_nil, line);
+        add_const(c, ctx, value_nil);
     else
         compile_sexpr(c, sexpr, false, ctx);
     return true;
@@ -254,7 +254,7 @@ static bool compile_source(compiler_t* c, const char* source_code, ctx_t* ctx)
     module_scope_t* scope = sv_malloc(c->scratch, sizeof(module_scope_t));
     *scope = (module_scope_t){ .var_to_modules = thm_init(8, &ctx->alloc), .outer = c->module_scope };
     if (scope->var_to_modules.set.store.cell == NULL)
-        compiler_oom(ctx, 0);
+        compiler_oom(ctx);
     c->module_scope = scope;
 
     token_t token;
@@ -289,7 +289,7 @@ static void emit_narrow(compiler_t* c, ctx_t* ctx, uint8_t op, int64_t arg,
 static void emit_wide(compiler_t* c, ctx_t* ctx, uint8_t op, uint32_t arg, int64_t line)
 {
     if (!fnb_add_arg(&c->builder, op, arg, line, &ctx->alloc))
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
 }
 
 static void emit_pop_locals(compiler_t* c, ctx_t* ctx, int64_t count, int64_t line)
@@ -298,10 +298,10 @@ static void emit_pop_locals(compiler_t* c, ctx_t* ctx, int64_t count, int64_t li
         emit_wide(c, ctx, OP_POP_LOCAL, (uint32_t)count, line);
 }
 
-static int64_t jump_emit(ctx_t* ctx, sv_opt_t(int64_t) ji, int64_t line)
+static int64_t jump_emit(ctx_t* ctx, sv_opt_t(int64_t) ji)
 {
     if (!ji.is_some)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     return ji.value;
 }
 
@@ -737,7 +737,7 @@ static void compile_record(compiler_t* c, const sexpr_t* args, int64_t n, int64_
             compiler_error_name(ctx, C_ERR_REDEFINED, line, "Record field", fields[i].name);
 
     for (int64_t i = 0; i < n_fields; i++) {
-        add_const(c, ctx, value_number((double)fields[i].id), line);
+        add_const(c, ctx, value_number((double)fields[i].id));
         compile_sexpr(c, *fields[i].value, false, ctx);
     }
     if (base == NULL) {
@@ -783,7 +783,7 @@ static sv_str_t module_path(compiler_t* c, sexpr_t e, int64_t line, ctx_t* ctx)
         sv_str_t outer = module_path(c, e.cons.arr[1], line, ctx);
         char* path = actor_path(outer, expect_id(e.cons.arr[2], ctx), c->scratch);
         if (path == NULL)
-            compiler_oom(ctx, line);
+            compiler_oom(ctx);
         return sv_str_init(path);
     }
 
@@ -900,15 +900,15 @@ static void compile_if(compiler_t* c, const sexpr_t* args, int64_t n, int64_t li
     init_scope(c);
     compile_sexpr(c, args[0], false, ctx);
 
-    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc), line);
+    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc));
     compile_sexpr(c, args[1], is_tail, ctx);
 
-    int64_t j2 = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc), line);
+    int64_t j2 = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
     patch_jump(c, ctx, j1, line);
     if (n == 3)
         compile_sexpr(c, args[2], is_tail, ctx);
     else
-        add_const(c, ctx, value_nil, line);
+        add_const(c, ctx, value_nil);
 
     patch_jump(c, ctx, j2, line);
     deinit_scope(c, ctx);
@@ -940,7 +940,7 @@ static void compile_if(compiler_t* c, const sexpr_t* args, int64_t n, int64_t li
     emit(c, ctx, OP_SET_LOCAL, line);                                                                         \
     uint32_t id_slot = locals_add(c->locals, id, ctx, line);                                                  \
                                                                                                               \
-    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc), line)
+    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc))
 
 #define LOOP_BODY()                                                                                           \
     if (destructure) {                                                                                        \
@@ -954,14 +954,14 @@ static void compile_if(compiler_t* c, const sexpr_t* args, int64_t n, int64_t li
         deinit_scope(c, ctx);                                                                                 \
     emit_pop_locals(c, ctx, names_count(c->locals->name_indexes), 0);                                         \
     if (!fnb_add_jump_back(&c->builder, loop_start, line, &ctx->alloc))                                       \
-        compiler_oom(ctx, line);                                                                              \
+        compiler_oom(ctx);                                                                              \
     patch_jump(c, ctx, j1, line)
 
 static void compile_for(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
 {
     assert(n == 2);
 
-    add_const(c, ctx, value_nil, line);
+    add_const(c, ctx, value_nil);
 
     LOOP_SETUP();
     emit(c, ctx, OP_POP, line);
@@ -1048,7 +1048,7 @@ static void compile_and_or(compiler_t* c, bool is_and, const sexpr_t* args, int6
     compile_sexpr(c, args[0], false, ctx);
     emit(c, ctx, OP_DUP, line);
 
-    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc), line);
+    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc));
 
     if (is_and) {
         emit(c, ctx, OP_POP, line);
@@ -1057,7 +1057,7 @@ static void compile_and_or(compiler_t* c, bool is_and, const sexpr_t* args, int6
         return;
     }
 
-    int64_t j2 = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc), line);
+    int64_t j2 = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
     patch_jump(c, ctx, j1, line);
     emit(c, ctx, OP_POP, line);
     compile_sexpr(c, args[1], false, ctx);
@@ -1155,7 +1155,7 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
         sv_str_copy(name, &ctx->alloc)
         : sv_str_init_copy("Anonymous function", &ctx->alloc);
     if (fn->name.chars == NULL)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     fn->arity = (uint8_t)params->cons.size;
     fn->loc = (loc_t){ .line = (int32_t)line, .file = fc->builder.file };
     modules_deinit(fc, ctx);
@@ -1165,11 +1165,11 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
 /**
  * Moves the child's function into the parent's chunk and unlinks the child. Returns its index.
  */
-static uint32_t adopt_fn(compiler_t* c, int64_t line, ctx_t* ctx)
+static uint32_t adopt_fn(compiler_t* c, ctx_t* ctx)
 {
     sv_opt_t(uint32_t) i = fnb_add_function(&c->builder, c->child->builder.fn, &ctx->alloc);
     if (!i.is_some)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     c->child->builder.fn = (fn_t){0};
     c->child = NULL;
     return i.value;
@@ -1205,7 +1205,7 @@ static void compile_fun(compiler_t* c, const sexpr_t* args, int64_t n, int64_t l
     compile_fn_body(c, cls, params, body, name, 0, (transient_hashmap_t){0}, line, ctx);
     compile_upvalue_loads(c, cls, line, ctx);
 
-    uint32_t fi = adopt_fn(c, line, ctx);
+    uint32_t fi = adopt_fn(c, ctx);
     emit_wide(c, ctx, OP_LOAD_CLOSURE, fi, 0);
     emit(c, ctx, has_cls ? (uint8_t)cls->cons.size : 0, 0);
     // anonymous: leave the closure on the stack
@@ -1242,7 +1242,7 @@ static void compile_fun_group(compiler_t* c, const sexpr_t* members, int64_t n, 
 
         sv_str_t name = expect_id(item[0], ctx);
         compile_fn_body(c, cls, params, body, name, upvalue_base, member_names, line, ctx);
-        adopt_fn(c, line, ctx);
+        adopt_fn(c, ctx);
 
         upvalue_base += has_cls ? cls->cons.size : 0;
     }
@@ -1304,7 +1304,7 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
     const char* file_path = c->current_path;
     char* path = actor_path(sv_str_init(file_path), name, c->scratch);
     if (path == NULL)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
 
     c->current_path = path;
     c->outer_path = file_path;
@@ -1324,12 +1324,12 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         .call_fn = value_nil,
     };
     if (vtable.name == NULL)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     int success = 0;
     sv_vec_push(&c->actor_vtables, vtable, &success, &ctx->alloc);
     if (!success) {
         sv_free(&ctx->alloc, (char*)vtable.name);
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
     }
 
     sv_opt_t(uint32_t) fns[] = { actor_fn(c, "update", path), actor_fn(c, "get", path), actor_fn(c, "call", path) };
@@ -1337,14 +1337,14 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         if (fns[i].is_some)
             emit_wide(c, ctx, OP_GET_GLOBAL, fns[i].value, line);
         else
-            add_const(c, ctx, value_nil, line);
+            add_const(c, ctx, value_nil);
     }
     emit_wide(c, ctx, OP_ACTOR_VTABLE, (uint32_t)(c->actor_vtables.size - 1), line);
 
     value_t path_value = value_init_str(sv_str_init(path), &ctx->alloc);
     if (AS_OBJ(path_value).cell == NULL)
-        compiler_oom(ctx, line);
-    module_put(&c->module_scope->var_to_modules, name, path_value, line, ctx);
+        compiler_oom(ctx);
+    module_put(&c->module_scope->var_to_modules, name, path_value, ctx);
 
     sexpr_t new_items[] = {
         { .tag = S_ATOM, .atom = { .kind = TOKEN_LITERAL, .line = line,
@@ -1388,7 +1388,7 @@ static void compile_fatbar(compiler_t* c, const sexpr_t* args, int64_t n,
     init_scope(c);
     compile_sexpr(c, args[0], is_tail, ctx);
     deinit_scope(c, ctx);
-    int64_t over = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc), line);
+    int64_t over = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
 
     c->fail_targets = target.next;
     for (int64_t i = 0; i < target.jumps.size; i++)
@@ -1412,7 +1412,7 @@ static void compile_fail(compiler_t* c, int64_t line, ctx_t* ctx)
 
     emit_pop_locals(c, ctx, live_locals(c) - target->locals, line);
 
-    int64_t j = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc), line);
+    int64_t j = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
     sv_vec_push(&target->jumps, j, NULL, c->scratch);
 }
 
@@ -1550,28 +1550,28 @@ static void compile_literal(compiler_t* c, literal_t lit, int64_t line, ctx_t* c
 {
     switch (lit.kind) {
         case LITERAL_NUMBER:
-            add_const(c, ctx, value_number(lit.number), line);
+            add_const(c, ctx, value_number(lit.number));
             break;
         case LITERAL_ATOM: {
             bool existed = false;
             uint32_t id = names_add(c->atoms, lit.str, &existed, ctx, &ctx->alloc);
-            add_const(c, ctx, value_atom((double)id), line);
+            add_const(c, ctx, value_atom((double)id));
             break;
         }
         case LITERAL_TRUE:
-            add_const(c, ctx, value_bool(true), line);
+            add_const(c, ctx, value_bool(true));
             break;
         case LITERAL_FALSE:
-            add_const(c, ctx, value_bool(false), line);
+            add_const(c, ctx, value_bool(false));
             break;
         case LITERAL_NIL:
-            add_const(c, ctx, value_nil, line);
+            add_const(c, ctx, value_nil);
             break;
         case LITERAL_STRING: {
             value_t s = value_init_str(lit.str, &ctx->alloc);
             if (AS_OBJ(s).cell == NULL)
-                compiler_oom(ctx, line);
-            add_const(c, ctx, s, line);
+                compiler_oom(ctx);
+            add_const(c, ctx, s);
             break;
         }
         case LITERAL_IDENTIFIER:
@@ -1588,14 +1588,14 @@ static void compile_atom(compiler_t* c, token_t token, ctx_t* ctx)
 }
 
 /* Puts a copy of the key and the value in a module table, which owns both. */
-static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, int64_t line, ctx_t* ctx)
+static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, ctx_t* ctx)
 {
     value_t k = value_init_str(key, &ctx->alloc);
     bool ok = AS_OBJ(k).cell != NULL && thm_put(t, (kv_t){ .key = k, .value = value }, &ctx->alloc);
     value_free(&k, &ctx->alloc);
     value_free(&value, &ctx->alloc);
     if (!ok)
-        compiler_oom(ctx, line);
+        compiler_oom(ctx);
 }
 
 
@@ -1624,26 +1624,26 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
     if (is_new) {
         if (thm_get(c->modules.to_be_compiled_modules, path_key).is_some)
             compiler_error(ctx, C_ERR_IMPORT_CICLE, line, "Import cicle detected");
-        module_put(&c->modules.to_be_compiled_modules, full_path, value_nil, line, ctx);
+        module_put(&c->modules.to_be_compiled_modules, full_path, value_nil, ctx);
 
         char* source_code = read_file(ctx, import_full_path, line, c->scratch);
 
         const char* current_path = c->current_path;
         c->current_path = import_full_path;
-        uint32_t file = enter_file(c, import_full_path, line, ctx);
+        uint32_t file = enter_file(c, import_full_path, ctx);
         if (compile_source(c, source_code, ctx))
             emit(c, ctx, OP_POP, 0);
         leave_file(c, file, ctx);
         c->current_path = current_path;
 
-        module_put(&c->modules.compiled_modules, full_path, value_nil, line, ctx);
+        module_put(&c->modules.compiled_modules, full_path, value_nil, ctx);
         thm_delete(&c->modules.to_be_compiled_modules, path_key, &ctx->alloc);
     }
 
     value_t path_value = value_init_str(full_path, &ctx->alloc);
     if (AS_OBJ(path_value).cell == NULL)
-        compiler_oom(ctx, line);
-    module_put(&c->module_scope->var_to_modules, name, path_value, line, ctx);
+        compiler_oom(ctx);
+    module_put(&c->module_scope->var_to_modules, name, path_value, ctx);
     return is_new;
 }
 
@@ -1684,7 +1684,7 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
             case FN_HASHMAP_GET_OR_NIL: compile_hashmap_get_or_nil(c, cons + 1, n - 1, a.line, ctx); return;
             case FN_IMPORT:
                 compile_import(c, cons + 1, a.line, ctx);
-                add_const(c, ctx, value_nil, a.line);
+                add_const(c, ctx, value_nil);
                 return;
             case FN_MATCH: compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, a.line, "Unlowered match expression");
             case FN_WHILE: {
@@ -1742,12 +1742,12 @@ static void add_native_fn(compiler_t* c, native_fn_t fn, sv_str_t prefix, ctx_t*
     globals_add(&c->globals, sv_str_init(fn.name), prefix, 0, ctx, c->scratch);
     value_t fn_val = value_init_native(fn, &ctx->alloc);
     if (AS_OBJ(fn_val).cell == NULL)
-        compiler_oom(ctx, 0);
+        compiler_oom(ctx);
     int success = 0;
     sv_vec_push(&c->global_values, fn_val, &success, &ctx->alloc);
     if (!success) {
         value_free(&fn_val, &ctx->alloc);
-        compiler_oom(ctx, 0);
+        compiler_oom(ctx);
     }
 }
 
@@ -1757,7 +1757,7 @@ static void add_native_mod(compiler_t* c, native_module_t mod, ctx_t* ctx)
     for (int64_t i = 0; i < mod.native_count; i++)
         add_native_fn(c, mod.native_fns[i], mod_name, ctx);
     // true marks it native, so imports find it from any directory
-    module_put(&c->modules.compiled_modules, mod_name, value_true, 0, ctx);
+    module_put(&c->modules.compiled_modules, mod_name, value_true, ctx);
 }
 
 vm_t compile(const char* base_path, compile_opts_t opts, ctx_t* ctx)
@@ -1778,7 +1778,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     ctx->on_error = &on_error;
     switch (setjmp(on_error)) {
         case 1:
-            error_set_oom(&ctx->err, (int)C_ERR_OOM, ctx->file, 0, &ctx->alloc);
+            ctx->err = error_oom((int)C_ERR_OOM);
             /* fallthrough */
         case 2:
             if (compiler != NULL)
@@ -1899,7 +1899,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         char* source_code = read_file(ctx, files[i], 0, scratch);
         if (has_value)
             emit(c, ctx, OP_POP, 0);
-        enter_file(c, files[i], 0, ctx);
+        enter_file(c, files[i], ctx);
         c->current_path = files[i];
         has_value = compile_source(c, source_code, ctx);
     }
@@ -1930,7 +1930,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     if ((n_fields > 0 && (vm.ctx.record_key_names == NULL || vm.ctx.record_fields.cell == NULL))
         || (n_atoms > 0 && vm.ctx.atom_names == NULL)
     ) {
-        error_set_oom(&ctx->err, (int)C_ERR_OOM, NULL, 0, &ctx->alloc);
+        ctx->err = error_oom((int)C_ERR_OOM);
         vm_deinit(&vm);
         return (vm_t){0};
     }

@@ -49,6 +49,8 @@ typedef struct obj_t {
 
 sv_rc_cell_def(obj_t);
 
+#define VALUE_OOM value_obj((sv_rc_t(obj_t)){ 0 })
+
 static inline void value_free(value_t* v, const sv_allocator_t* a)
 {
     if (IS_OBJ(*v)) {

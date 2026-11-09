@@ -22,8 +22,8 @@ typedef struct {
  */
 _Noreturn void ctx_fail(ctx_t*, int code, int64_t line, const char* msg);
 /**
- * As ctx_fail, with an out of memory message naming the line.
+ * As ctx_fail, with the out of memory error.
  */
-_Noreturn void ctx_fail_oom(ctx_t*, int code, int64_t line);
+_Noreturn void ctx_fail_oom(ctx_t*, int code);
 
 #endif

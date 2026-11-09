@@ -3,10 +3,16 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-static error_t error_oom = {
-    .error_code = -1,
+static const error_t oom = {
     .msg = { .chars = "Out of memory", .size = 13 },
 };
+
+error_t error_oom(int code)
+{
+    error_t e = oom;
+    e.error_code = code;
+    return e;
+}
 
 error_t error_init(void)
 {
@@ -41,20 +47,12 @@ static int write_loc(char* buf, int size, const char* file, int64_t line)
     return at >= size ? size - 1 : at;
 }
 
-bool error_set_oom(error_t* e, int code, const char* file, int64_t line, const sv_allocator_t* a)
-{
-    char msg[FILENAME_MAX + 64];
-    int at = write_loc(msg, sizeof(msg), file, line);
-    snprintf(msg + at, sizeof(msg) - at, "Out of memory");
-    return error_set(e, code, msg, a);
-}
-
 error_t error_fmt(int code, const char* file, int64_t line, const sv_allocator_t* a, const char* fmt, ...)
 {
     int bufsize = sizeof(char) * 256;
     char* buf = sv_malloc(a, bufsize);
     if (buf == NULL)
-        return error_oom;
+        return error_oom(code);
 
     int at = write_loc(buf, bufsize, file, line);
 
@@ -73,8 +71,7 @@ void error_free(error_t* e, const sv_allocator_t* a)
 {
     sv_str_deinit(&e->trace, a);
     e->trace = sv_str_init("");
-    if (e->error_code < 0)
-        return;
-    sv_str_deinit(&e->msg, a);
+    if (e->msg.chars != oom.msg.chars)
+        sv_str_deinit(&e->msg, a);
     e->msg = sv_str_init("");
 }

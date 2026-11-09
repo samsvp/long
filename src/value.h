@@ -137,7 +137,7 @@ static const value_t value_false = { .kind = VALUE_BOOL, .boolean = false };
 #define IS_OBJ_KIND(v, k) (IS_OBJ(v) && AS_OBJ(v).cell->value.kind == (k))
 #define IS_STR(v) IS_OBJ_KIND(v, OBJ_STR)
 #define IS_ACTOR(v) IS_OBJ_KIND(v, OBJ_ACTOR)
-#define IS_ERR(v) IS_OBJ_KIND(v, OBJ_ERR)
+#define IS_ERR(v) (IS_OBJ(v) && (AS_OBJ(v).cell == NULL || AS_OBJ(v).cell->value.kind == OBJ_ERR))
 #define IS_LIST(v) IS_OBJ_KIND(v, OBJ_LIST)
 #define IS_CONS(v) (IS_LIST(v) && !ll_is_empty(AS_LIST(v)))
 #define IS_NATIVE(v) IS_OBJ_KIND(v, OBJ_NATIVE_FN)

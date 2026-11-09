@@ -6,8 +6,8 @@ _Noreturn void ctx_fail(ctx_t* ctx, int code, int64_t line, const char* msg)
     longjmp(*ctx->on_error, 2);
 }
 
-_Noreturn void ctx_fail_oom(ctx_t* ctx, int code, int64_t line)
+_Noreturn void ctx_fail_oom(ctx_t* ctx, int code)
 {
-    error_set_oom(&ctx->err, code, ctx->file, line, &ctx->alloc);
+    ctx->err = error_oom(code);
     longjmp(*ctx->on_error, 2);
 }

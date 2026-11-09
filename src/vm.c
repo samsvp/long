@@ -179,7 +179,7 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
         if (fn.arity != arg_count)
             return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
         value_t res = fn.fn(args, arg_count, vm);
-        if (IS_ERR(res))
+        if (IS_ERR(res) && AS_OBJ(res).cell != NULL)
             trace_native(&AS_ERR(res), fn.name, a);
         return res;
     }
@@ -208,7 +208,7 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
     int success;
     sv_vec_grow_cap(&vm->locals, locals_offset + arg_count + 1, &success, a);
     if (!success)
-        return value_init_err(ERROR("Out of memory when passing arguments", VM_ERR_OOM), a);
+        return VALUE_OOM;
     for (uint8_t i = 0; i < arg_count; i++)
         vm->locals.arr[vm->locals.size++] = value_borrow(args[i]);
     vm->locals.arr[vm->locals.size++] = value_borrow(callee);
@@ -216,7 +216,7 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
     sv_vec_push(&vm->call_frames, init_frame(fn, locals_offset, stack_offset, upvalues, group),
                 &success, a);
     sv_opt_t(error_t) ret = success ? vm_run_frame(vm)
-        : sv_opt_some_t(error_t, ERROR("Out of memory when creating call frame", VM_ERR_OOM));
+        : sv_opt_some_t(error_t, error_oom(VM_ERR_OOM));
 
     value_t res = ret.is_some ? value_init_err(ret.value, a) : sv_vec_pop(vm->stack);
     arr_remove_n(&vm->stack, vm->stack.size - stack_offset, a);
@@ -248,8 +248,7 @@ sv_opt_t(error_t) vm_run(vm_t* vm)
         a
     );
     if (!success)
-        return sv_opt_some_t(error_t,
-            error_fmt(VM_ERR_OOM, NULL, 0, a, "Out of memory when creating the first call frame"));
+        return sv_opt_some_t(error_t, error_oom(VM_ERR_OOM));
 
     return vm_run_frame(vm);
 }
@@ -270,28 +269,30 @@ static bool is_safe_int(double x)
 
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 {
-#define TRY_NOT_NULL(v, err_msg) TRY_OR((v) != NULL, (void)0, err_msg)
+#define TRY_NOT_NULL(v) TRY_OR((v) != NULL, (void)0)
 
 #define LOC() chunk_loc(&frame->fn->chunk, (ip - code) - 1)
 #define LOC_FILE() (vm->files.arr[LOC().file].chars)
 
-#define TRY_OR(cond, cleanup, what) {                                                                         \
+#define TRY_OR(cond, cleanup) {                                                                               \
     if (!(cond)) {                                                                                            \
         cleanup;                                                                                              \
-        err = error_fmt(VM_ERR_OOM, LOC_FILE(), LOC().line, a, "Out of memory %s", what);                     \
+        err = error_oom(VM_ERR_OOM);                                                                          \
         goto error;                                                                                           \
     } }
 
 #define TRY_PUSH(arr, v)                                                                                      \
     sv_vec_push(&(arr), v, &success, a);                                                                      \
-    TRY_OR(success, (void)0, "when appending to vector")
+    TRY_OR(success, (void)0)
 
 
-#define TRY_PUSH_STACK(v) TRY_PUSH(stack, v)
+#define TRY_PUSH_STACK(v) {                                                                                   \
+    value_t pushed = (v);                                                                                     \
+    TRY_PUSH_OWNED(pushed); }
 
 #define TRY_PUSH_OWNED(v)                                                                                     \
     sv_vec_push(&stack, v, &success, a);                                                                      \
-    TRY_OR(success, value_free(&v, a), "when appending to vector")
+    TRY_OR(success, value_free(&v, a))
 
 #define TYPE_NAME(v) value_type_name(v)
 
@@ -317,7 +318,8 @@ static sv_opt_t(error_t) vm_run_frame(vm_t* vm)
 
 #define SET(arr) {                                                                                            \
     value_t v = sv_vec_pop(stack);                                                                            \
-    TRY_PUSH(arr, v);                                                                                         \
+    sv_vec_push(&(arr), v, &success, a);                                                                      \
+    TRY_OR(success, value_free(&v, a))                                                                        \
     DISPATCH(); }
 
 #define GET(src, base) {                                                                                      \
@@ -500,7 +502,7 @@ DISPATCH(); }
             n_type n = 0;                                                                                     \
             read(n);                                                                                          \
             value_t arr = init_fn(&stack.arr[stack.size - (mult) * n], n, a);                                 \
-            TRY_NOT_NULL(AS_OBJ(arr).cell, "when creating collection");                                       \
+            TRY_NOT_NULL(AS_OBJ(arr).cell);                                                                   \
             arr_remove_n(&stack, (mult) * n, a);                                                              \
             TRY_PUSH_OWNED(arr);                                                                              \
             DISPATCH(); }
@@ -513,7 +515,7 @@ DISPATCH(); }
 #define OP_MAP_X(fn) do {                                                                                     \
     uint32_t n = AS_NUMBER(sv_vec_pop(stack));                                                                \
     value_t arr = fn(&stack.arr[stack.size - n], n, a);                                                       \
-    TRY_NOT_NULL(AS_OBJ(arr).cell, "when creating collection");                                               \
+    TRY_NOT_NULL(AS_OBJ(arr).cell);                                                                           \
     arr_remove_n(&stack, n, a);                                                                               \
     TRY_PUSH_OWNED(arr);                                                                                      \
 } while(0)
@@ -538,10 +540,9 @@ DISPATCH(); }
             if (missing >= 0)
                 RAISE(VM_ERR_FIELD_NOT_FOUND, value_free(&base, a),
                       "Record has no field '%s' to update", vm_field_name(&vm->ctx, (uint32_t)missing));
-            TRY_OR(updated.items != NULL, value_free(&base, a), "when updating a record");
+            TRY_OR(updated.items != NULL, value_free(&base, a));
             value_t out = value_wrap_record(updated, a);
-            TRY_OR(AS_OBJ(out).cell != NULL, record_deinit(&updated, a); value_free(&base, a),
-                   "when updating a record");
+            TRY_OR(AS_OBJ(out).cell != NULL, record_deinit(&updated, a); value_free(&base, a));
 
             arr_remove_n(&stack, 2 * n, a);
             value_free(&base, a);
@@ -563,11 +564,11 @@ DISPATCH(); }
             for (uint32_t i = 0; i < n; i++) {
                 hashmap_t next = map_put(cur, (kv_t){ .key = kvs[2 * i], .value = kvs[2 * i + 1] }, a);
                 map_deinit(&cur, a);
-                TRY_NOT_NULL(next.cell, "when updating a hashmap");
+                TRY_NOT_NULL(next.cell);
                 cur = next;
             }
             value_t out = value_wrap_map(cur, a);
-            TRY_OR(AS_OBJ(out).cell != NULL, map_deinit(&cur, a), "when updating a hashmap");
+            TRY_OR(AS_OBJ(out).cell != NULL, map_deinit(&cur, a));
 
             arr_remove_n(&stack, 2 * n, a);
             TRY_PUSH_OWNED(out);
@@ -582,10 +583,9 @@ DISPATCH(); }
                       "Spread into a list needs a list, got %s", TYPE_NAME(tail));
 
             list_t list = ll_prepend_arr(AS_LIST(tail), &stack.arr[stack.size - n], n, a);
-            TRY_OR(list.cell != NULL, value_free(&tail, a), "when building a list");
+            TRY_OR(list.cell != NULL, value_free(&tail, a));
             value_t out = value_wrap_list(list, a);
-            TRY_OR(AS_OBJ(out).cell != NULL, ll_deinit(&list, a); value_free(&tail, a),
-                   "when building a list");
+            TRY_OR(AS_OBJ(out).cell != NULL, ll_deinit(&list, a); value_free(&tail, a));
 
             arr_remove_n(&stack, n, a);
             value_free(&tail, a);
@@ -606,9 +606,9 @@ DISPATCH(); }
                 sv_str_t s = sv_str_add(AS_OBJ(v1).cell->value.str, AS_OBJ(v2).cell->value.str, a);
                 value_free(&v1, a);
                 value_free(&v2, a);
-                TRY_OR(s.size >= 0, (void)0, "when concatenating strings");
+                TRY_OR(s.size >= 0, (void)0);
                 value_t res = value_init_str_own(s, a);
-                TRY_NOT_NULL(AS_OBJ(res).cell, "when creating string");
+                TRY_NOT_NULL(AS_OBJ(res).cell);
                 TRY_PUSH_OWNED(res);
                 DISPATCH();
             }
@@ -662,7 +662,7 @@ DISPATCH(); }
                 if (c.size == 0)
                     goto index_err;
                 out = value_init_str(c, a);
-                TRY_OR(AS_OBJ(out).cell != NULL, value_free(&container, a), "when indexing a string");
+                TRY_OR(AS_OBJ(out).cell != NULL, value_free(&container, a));
             } else {
                 sv_opt_t(value_t) res = IS_LIST(container)
                     ? ll_get(AS_LIST(container), i)
@@ -706,13 +706,12 @@ DISPATCH(); }
             value_t out;
             if (IS_LIST(container)) {
                 list_t list = ll_slice(AS_LIST(container), lo, hi, a);
-                TRY_OR(list.cell != NULL, value_free(&container, a), "when slicing a list");
+                TRY_OR(list.cell != NULL, value_free(&container, a));
                 out = value_wrap_list(list, a);
-                TRY_OR(AS_OBJ(out).cell != NULL, ll_deinit(&list, a); value_free(&container, a),
-                       "when slicing a list");
+                TRY_OR(AS_OBJ(out).cell != NULL, ll_deinit(&list, a); value_free(&container, a));
             } else {
                 out = value_init_str(str_slice(AS_STR(container), lo, hi), a);
-                TRY_OR(AS_OBJ(out).cell != NULL, value_free(&container, a), "when slicing a string");
+                TRY_OR(AS_OBJ(out).cell != NULL, value_free(&container, a));
             }
 
             value_free(&container, a);
@@ -803,7 +802,7 @@ DISPATCH(); }
             value_t state = sv_vec_pop(stack);
             actor_t actor = actor_init(state, &vm->actor_vtables.arr[i]);
             value_t v = value_wrap_actor(&actor, a);
-            TRY_OR(AS_OBJ(v).cell != NULL, value_free(&state, a), "when creating actor");
+            TRY_OR(AS_OBJ(v).cell != NULL, value_free(&state, a));
             TRY_PUSH_OWNED(v);
             DISPATCH();
         }
@@ -814,7 +813,7 @@ DISPATCH(); }
                       "Type is not iterable: %s", TYPE_NAME(v));
             value_t iter = value_init_iter(v, a);
             value_free(&v, a);
-            TRY_NOT_NULL(AS_OBJ(iter).cell, "when creating iterator");
+            TRY_NOT_NULL(AS_OBJ(iter).cell);
             TRY_PUSH_OWNED(iter);
             DISPATCH();
         }
@@ -826,10 +825,10 @@ DISPATCH(); }
             sv_opt_t(value_t) next = iterable_next(&AS_ITER(v), a);
             value_free(&v, a);
             TRY_OR(!next.is_some || VALUE_KIND(next.value) != VALUE_OBJ || AS_OBJ(next.value).cell != NULL,
-                   (void)0, "when advancing iterator");
-            value_t has = value_bool(next.is_some);
+                   (void)0);
             value_t item = next.is_some ? next.value : value_nil;
-            TRY_PUSH_STACK(has);
+            sv_vec_push(&stack, value_bool(next.is_some), &success, a);
+            TRY_OR(success, value_free(&item, a));
             TRY_PUSH_OWNED(item);
             DISPATCH();
         }
@@ -842,7 +841,7 @@ DISPATCH(); }
                 &stack.arr[stack.size - n_cls],
                 n_cls,
                 a);
-            TRY_NOT_NULL(AS_OBJ(cls).cell, "when creating closure");
+            TRY_NOT_NULL(AS_OBJ(cls).cell);
             arr_remove_n(&stack, n_cls, a);
             TRY_PUSH_OWNED(cls);
             DISPATCH();
@@ -854,7 +853,7 @@ DISPATCH(); }
             uint8_t n_upvalues = READ_BYTE();
 
             sv_vec_grow_cap(&stack, stack.size + n_members, &success, a);
-            TRY_OR(success, (void)0, "when creating closure group")
+            TRY_OR(success, (void)0)
 
             closure_group_t g = {
                 .members = {
@@ -867,19 +866,19 @@ DISPATCH(); }
             };
             if (n_upvalues > 0) {
                 g.upvalues = (sv_vec_t(value_t))sv_vec_init_capacity(value_t, n_upvalues, a);
-                TRY_NOT_NULL(g.upvalues.arr, "when creating closure group");
+                TRY_NOT_NULL(g.upvalues.arr);
                 g.upvalues.size = n_upvalues;
                 for (int64_t i = 0; i < n_upvalues; i++)
                     g.upvalues.arr[i] = value_borrow(stack.arr[stack.size - n_upvalues + i]);
             }
 
             sv_rc_t(closure_group_t) group = sv_rc_init(closure_group_t, g, clsg_deinit, a);
-            TRY_OR(group.cell != NULL, clsg_deinit(&g, a), "when creating closure group")
+            TRY_OR(group.cell != NULL, clsg_deinit(&g, a))
             arr_remove_n(&stack, n_upvalues, a);
 
             for (int64_t i = n_members - 1; i >= 0; i--) {
                 value_t member = value_init_closure_member(sv_rc_borrow(group), i, a);
-                TRY_OR(AS_OBJ(member).cell != NULL, sv_rc_deinit(&group, a), "when creating closure member")
+                TRY_OR(AS_OBJ(member).cell != NULL, sv_rc_deinit(&group, a))
                 stack.arr[stack.size++] = member;
             }
             sv_rc_deinit(&group, a);
@@ -890,7 +889,7 @@ DISPATCH(); }
             if (frame->group.cell == NULL)
                 RAISE(VM_ERR_NO_GROUP, (void)0, "No closure group in scope");
             value_t member = value_init_closure_member(sv_rc_borrow(frame->group), i, a);
-            TRY_NOT_NULL(AS_OBJ(member).cell, "when creating closure member");
+            TRY_NOT_NULL(AS_OBJ(member).cell);
             TRY_PUSH_OWNED(member);
             DISPATCH();
         }
@@ -920,8 +919,7 @@ DISPATCH(); }
     value_t ret = fn.fn(args, arg_count, vm);                                                                 \
     stack = vm->stack;                                                                                        \
     frame = &sv_vec_last(vm->call_frames);                                                                    \
-    TRY_OR(VALUE_KIND(ret) != VALUE_OBJ || AS_OBJ(ret).cell != NULL, value_free(&value, a),                   \
-           "when returning from a native function");                                                          \
+    TRY_OR(VALUE_KIND(ret) != VALUE_OBJ || AS_OBJ(ret).cell != NULL, value_free(&value, a));                  \
     if (IS_ERR(ret)) {                                                                                        \
         /* the error is complete; its value is fresh, so the message moves out of the cell */                 \
         err = AS_ERR(ret);                                                                                    \
@@ -961,11 +959,11 @@ DISPATCH(); }
     do {                                                                                                      \
     if (arg_count > 0) {                                                                                      \
         sv_vec_push_many(&vm->locals, args, arg_count, &success, a);                                          \
-        TRY_OR(success, value_free(&value, a), "when passing arguments");                                     \
+        TRY_OR(success, value_free(&value, a));                                                               \
         stack.size -= arg_count;                                                                              \
     }                                                                                                         \
     sv_vec_push(&vm->locals, value, &success, a);                                                             \
-    TRY_OR(success, value_free(&value, a), "when passing arguments");                                         \
+    TRY_OR(success, value_free(&value, a));                                                                   \
 } while (0)
         CASE(OP_CALL): {
             LOAD_FN();
@@ -1069,9 +1067,9 @@ DISPATCH(); }
         __VA_ARGS__;                                                                                          \
     }                                                                                                         \
     list_t rest = ll_tail(AS_LIST(v), a);                                                                     \
-    TRY_OR(rest.cell != NULL, (void)0, "when taking a list tail")                                             \
+    TRY_OR(rest.cell != NULL, (void)0)                                                                        \
     value_t tail = value_wrap_list(rest, a);                                                                  \
-    TRY_OR(AS_OBJ(tail).cell != NULL, ll_deinit(&rest, a), "when taking a list tail")                         \
+    TRY_OR(AS_OBJ(tail).cell != NULL, ll_deinit(&rest, a))                                                    \
     value_t first = value_borrow(ll_head(AS_LIST(v)).value);                                                  \
     TRY_PUSH_OWNED(tail);                                                                                     \
     TRY_PUSH_OWNED(first);                                                                                    \

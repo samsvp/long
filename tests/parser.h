@@ -25,7 +25,7 @@ static inline bool sv_test_parse(const char* src, ctx_t* ctx, sv_arena_t* arena,
    arena->error_buffer = &on_error;
    switch (setjmp(on_error)) {
       case 1:
-         error_set_oom(&ctx->err, (int)PARSER_ERROR_OOM, NULL, 0, &ctx->alloc);
+         ctx->err = error_oom((int)PARSER_ERROR_OOM);
          /* fallthrough */
       case 2:
          ctx->on_error = NULL;
