@@ -14,7 +14,8 @@ static int run(vm_t* vm, ctx_t ctx)
 
     sv_opt_t(error_t) err = vm_run(vm);
     if (err.is_some) {
-        sv_log_error(&ctx.logger, "%.*s", (int)err.value.msg.size, err.value.msg.chars);
+        sv_log_error(&ctx.logger, "%.*s%.*s", (int)err.value.msg.size, err.value.msg.chars,
+                     (int)err.value.trace.size, err.value.trace.chars);
         error_free(&err.value, &ctx.alloc);
         vm_deinit(vm);
         return 1;

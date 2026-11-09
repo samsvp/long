@@ -15,6 +15,7 @@
 typedef struct {
     int error_code;
     sv_str_t msg; // always owned, see error_free
+    sv_str_t trace;
 } error_t;
 
 sv_opt_def(error_t);

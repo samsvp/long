@@ -13,6 +13,7 @@ error_t error_init(void)
     return (error_t){
         .error_code = 0,
         .msg = sv_str_init(""),
+        .trace = sv_str_init(""),
     };
 }
 
@@ -20,6 +21,7 @@ void error_reset(error_t* e)
 {
     e->error_code = 0;
     e->msg = sv_str_init("");
+    e->trace = sv_str_init("");
 }
 
 bool error_set(error_t* e, int code, const char* msg, const sv_allocator_t* a)
@@ -69,6 +71,8 @@ error_t error_fmt(int code, const char* file, int64_t line, const sv_allocator_t
 
 void error_free(error_t* e, const sv_allocator_t* a)
 {
+    sv_str_deinit(&e->trace, a);
+    e->trace = sv_str_init("");
     if (e->error_code < 0)
         return;
     sv_str_deinit(&e->msg, a);

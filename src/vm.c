@@ -97,6 +97,56 @@ const char* vm_field_name(const vm_ctx_t* ctx, uint32_t id)
 
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm);
 
+#define TRACE_MAX_FRAMES 16
+
+static void trace_add(error_t* err, const char* line, const sv_allocator_t* a)
+{
+    sv_str_builder b = sv_strb_init();
+    if ((err->trace.size > 0 && sv_strb_add(&b, err->trace.chars, err->trace.size, a) < 0)
+        || sv_strb_add(&b, line, (int64_t)strlen(line), a) < 0
+    ) {
+        sv_strb_deinit(&b, a);
+        return;
+    }
+    sv_str_deinit(&err->trace, a);
+    err->trace = sv_strb_to_str(&b);
+}
+
+static void trace_native(error_t* err, const char* name, const sv_allocator_t* a)
+{
+    char line[128];
+    snprintf(line, sizeof(line), "\n  in %s", name);
+    trace_add(err, line, a);
+}
+
+static void trace_frames(vm_t* vm, error_t* err, int64_t first, int64_t top_ip)
+{
+    const sv_allocator_t* a = vm->ctx.alloc;
+    int64_t top = vm->call_frames.size - 1;
+    int64_t shown = 0;
+    for (int64_t i = top; i >= first && shown < TRACE_MAX_FRAMES; i--, shown++) {
+        const call_frame_t* f = &vm->call_frames.arr[i];
+        int64_t ip = i == top ? top_ip : f->ip;
+        sv_str_t name = f->fn->name.size > 0 ? f->fn->name : sv_str_init("<top level>");
+        char line[FILENAME_MAX + 128];
+        if (ip > 0) {
+            loc_t loc = f->fn->chunk.locs.arr[ip - 1];
+            snprintf(line, sizeof(line), "\n  in %.*s at %s:%" PRId32, (int)name.size, name.chars,
+                     vm->files.arr[loc.file].chars, loc.line);
+        } else {
+            snprintf(line, sizeof(line), "\n  in %.*s", (int)name.size, name.chars);
+        }
+        trace_add(err, line, a);
+    }
+
+    int64_t hidden = top - first + 1 - shown;
+    if (hidden > 0) {
+        char line[64];
+        snprintf(line, sizeof(line), "\n  ... %" PRId64 " more calls", hidden);
+        trace_add(err, line, a);
+    }
+}
+
 #define ERROR(_msg, code) error_fmt(code, file, line, a, "%s", _msg)
 value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg_count)
 {
@@ -113,7 +163,10 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
         native_fn_t fn = AS_NATIVE(callee);
         if (fn.arity != arg_count)
             return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
-        return fn.fn(args, arg_count, vm);
+        value_t res = fn.fn(args, arg_count, vm);
+        if (IS_ERR(res))
+            trace_native(&AS_ERR(res), fn.name, a);
+        return res;
     }
 
     fn_t* fn;
@@ -864,8 +917,10 @@ DISPATCH(); }
         /* the error is complete; its value is fresh, so the message moves out of the cell */                 \
         err = AS_ERR(ret);                                                                                    \
         AS_ERR(ret).msg = sv_str_init("");                                                                    \
+        AS_ERR(ret).trace = sv_str_init("");                                                                  \
         value_free(&ret, a);                                                                                  \
         value_free(&value, a);                                                                                \
+        trace_native(&err, fn.name, a);                                                                       \
         goto error;                                                                                           \
     }                                                                                                         \
     arr_remove_n(&stack, arg_count, a);                                                                       \
@@ -1084,6 +1139,7 @@ DISPATCH(); }
     return sv_opt_none_t(error_t);
 
 error:
+    trace_frames(vm, &err, base - 1, ip - code);
     vm->stack = stack;
     vm->call_frames.size = base - 1;
     return sv_opt_some_t(error_t, err);
