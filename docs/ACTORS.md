@@ -13,6 +13,10 @@ actor Stack(init) do
     fun peek(stack)
         actor::get(stack, :head)
 
+    # the constructor is in scope inside the actor
+    fun from_list(values)
+        Stack(values)
+
     # must implement to update the inner state
     fun update(state, msg)
     | (state, { op: :append, value }) do

@@ -1306,17 +1306,6 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
     if (path == NULL)
         compiler_oom(ctx);
 
-    c->current_path = path;
-    c->outer_path = file_path;
-    for (int64_t i = 2; i < n; i++) {
-        int64_t fun_line = args[i].cons.arr[0].atom.line;
-        check_actor_fn(&args[i], fun_line, ctx);
-        compile_fun(c, args[i].cons.arr + 1, args[i].cons.size - 1, fun_line, ctx);
-        emit(c, ctx, OP_POP, line);
-    }
-    c->outer_path = NULL;
-    c->current_path = file_path;
-
     actor_vtable_t vtable = {
         .name = sv_str_to_c_str(name, &ctx->alloc),
         .update_fn = value_nil,
@@ -1331,15 +1320,7 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         sv_free(&ctx->alloc, (char*)vtable.name);
         compiler_oom(ctx);
     }
-
-    sv_opt_t(uint32_t) fns[] = { actor_fn(c, "update", path), actor_fn(c, "get", path), actor_fn(c, "call", path) };
-    for (int i = 0; i < 3; i++) {
-        if (fns[i].is_some)
-            emit_wide(c, ctx, OP_GET_GLOBAL, fns[i].value, line);
-        else
-            add_const(c, ctx, value_nil);
-    }
-    emit_wide(c, ctx, OP_ACTOR_VTABLE, (uint32_t)(c->actor_vtables.size - 1), line);
+    uint32_t vtable_index = (uint32_t)(c->actor_vtables.size - 1);
 
     value_t path_value = value_init_str(sv_str_init(path), &ctx->alloc);
     if (AS_OBJ(path_value).cell == NULL)
@@ -1350,7 +1331,7 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         { .tag = S_ATOM, .atom = { .kind = TOKEN_LITERAL, .line = line,
             .literal = { .kind = LITERAL_IDENTIFIER, .literal = sv_str_init("actor-new") } } },
         { .tag = S_ATOM, .atom = { .kind = TOKEN_LITERAL, .line = line,
-            .literal = { .kind = LITERAL_NUMBER, .number = (double)(c->actor_vtables.size - 1) } } },
+            .literal = { .kind = LITERAL_NUMBER, .number = (double)vtable_index } } },
         args[1],
     };
     sexpr_t params[] = { args[1] };
@@ -1360,6 +1341,26 @@ static void compile_actor(compiler_t* c, const sexpr_t* args, int64_t n, int64_t
         { .tag = S_CONS, .cons = { .arr = new_items, .size = 3 } },
     };
     compile_fun(c, constructor, 3, line, ctx);
+
+    c->current_path = path;
+    c->outer_path = file_path;
+    for (int64_t i = 2; i < n; i++) {
+        int64_t fun_line = args[i].cons.arr[0].atom.line;
+        check_actor_fn(&args[i], fun_line, ctx);
+        compile_fun(c, args[i].cons.arr + 1, args[i].cons.size - 1, fun_line, ctx);
+        emit(c, ctx, OP_POP, line);
+    }
+    c->outer_path = NULL;
+    c->current_path = file_path;
+
+    sv_opt_t(uint32_t) fns[] = { actor_fn(c, "update", path), actor_fn(c, "get", path), actor_fn(c, "call", path) };
+    for (int i = 0; i < 3; i++) {
+        if (fns[i].is_some)
+            emit_wide(c, ctx, OP_GET_GLOBAL, fns[i].value, line);
+        else
+            add_const(c, ctx, value_nil);
+    }
+    emit_wide(c, ctx, OP_ACTOR_VTABLE, vtable_index, line);
 }
 
 static int64_t live_locals(const compiler_t* c)
