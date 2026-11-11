@@ -32,6 +32,18 @@ value_t ntvl_ireduce(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_add(const value_t*, uint8_t, vm_t*);
 /**
+ * prepend(list1, value): prepends the value to the list.
+ */
+value_t ntvl_prepend(const value_t*, uint8_t, vm_t*);
+/**
+ * remove(list, value): removes the first occurrence of value from the list
+ */
+value_t ntvl_remove(const value_t*, uint8_t, vm_t*);
+/**
+ * remove_all(list, value): removes all occurrences of value from the list
+ */
+value_t ntvl_remove_all(const value_t*, uint8_t, vm_t*);
+/**
  * zip(lst1, lst2): zips two lists into a tuple of every element. Both must have the same length.
  */
 value_t ntvl_zip(const value_t*, uint8_t, vm_t*);

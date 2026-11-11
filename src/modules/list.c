@@ -153,6 +153,17 @@ value_t ntvl_ireduce(const value_t* args, uint8_t n, vm_t* vm)
     return reduce_list(args[0], args[1], args[2], true, vm);
 }
 
+value_t ntvl_prepend(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+    CHECK_LIST(args[0]);
+    list_t list = ll_prepend(AS_LIST(args[0]), args[1], vm->ctx.alloc);
+    CHECK_OOM(list.cell);
+    value_t value = value_wrap_list(list, vm->ctx.alloc);
+    CHECK_OOM(AS_OBJ(value).cell);
+    return value;
+}
+
 value_t ntvl_add(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
@@ -844,3 +855,39 @@ value_t ntvl_sum(const value_t* args, uint8_t n, vm_t* vm)
         return sum_number(list, vm);
     return bad_arg_type_error(first, VALUE_NUMBER, OBJ_STR, vm);
 }
+
+static value_t remove_values(const value_t* args, uint8_t n, bool all, vm_t* vm)
+{
+    assert(n == 2);
+
+    CHECK_LIST(args[0]);
+
+    list_t list = AS_LIST(args[0]);
+    int64_t count = ll_count(list);
+    ll_iter_t iter = ll_iter_init_no_borrow(list);
+
+    sv_vec_t(value_t) vec = sv_vec_init_capacity(value_t, count, vm->ctx.alloc);
+    if (vec.arr == NULL)
+        return VALUE_OOM;
+
+    sv_opt_t(value_t) v = sv_opt_none_t(value_t);
+    bool found = false;
+    while (v = ll_iter_next(&iter), v.is_some) {
+        if ((!all && found) || !value_eql(v.value, args[1])) {
+            vec.arr[count - ++vec.size] = value_borrow(v.value);
+        } else {
+            found = true;
+        }
+    }
+
+    if (vec.size < count)
+        memmove(vec.arr, vec.arr + count - vec.size, vec.size * sizeof(value_t));
+    return value_from_list(vec, vm);
+}
+
+value_t ntvl_remove(const value_t* args, uint8_t n, vm_t* vm)
+{ return remove_values(args, n, false, vm); }
+
+value_t ntvl_remove_all(const value_t* args, uint8_t n, vm_t* vm)
+{ return remove_values(args, n, true, vm); }
+

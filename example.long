@@ -94,9 +94,9 @@ list::zip([1, 2, 3, 5], [4, 5, 6, 8])
 |> println()
 
 fun
-| f() do 1
-| g() do 2
+| g() do 1
+| h() do 2
 end
 
-f()
+g()
 |> println()
