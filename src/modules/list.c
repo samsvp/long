@@ -24,6 +24,16 @@
         return bad_arg_type_error(v, VALUE_OBJ, OBJ_LIST, vm);                                                \
 } while (0)
 
+#define CHECK_INDEX(v) do {                                                                                   \
+    CHECK_NUMBER(v);                                                                                          \
+    if (AS_NUMBER(v) != floor(AS_NUMBER(v)))                                                                  \
+        return value_init_err(error_fmt(VM_ERR_WRONG_TYPE, vm_file(vm), vm_line(vm), vm->ctx.alloc,          \
+                                        "Index must be an integer, got %g", AS_NUMBER(v)),                    \
+                              vm->ctx.alloc);                                                                 \
+} while (0)
+
+#define AS_INDEX(v) ((int64_t)fmax(fmin(AS_NUMBER(v), 0x1p62), -0x1p62))
+
 static value_t wrap_list(list_t list, vm_t* vm)
 {
     CHECK_OOM(list.cell);
@@ -890,4 +900,49 @@ value_t ntvl_remove(const value_t* args, uint8_t n, vm_t* vm)
 
 value_t ntvl_remove_all(const value_t* args, uint8_t n, vm_t* vm)
 { return remove_values(args, n, true, vm); }
+
+value_t ntvl_remove_at(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    CHECK_LIST(args[0]);
+    CHECK_INDEX(args[1]);
+
+    list_t list = AS_LIST(args[0]);
+    int64_t i = AS_INDEX(args[1]);
+    int64_t count = ll_count(list);
+    if (i < -count || i >= count)
+        return value_borrow(args[0]);
+
+    return wrap_list(ll_delete_at(list, i, vm->ctx.alloc), vm);
+}
+
+value_t ntvl_get(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    CHECK_LIST(args[0]);
+    CHECK_INDEX(args[1]);
+
+    sv_opt_t(value_t) v = ll_get(AS_LIST(args[0]), AS_INDEX(args[1]));
+    return v.is_some ? value_borrow(v.value) : value_nil;
+}
+
+value_t ntvl_insert_at(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 3);
+
+    CHECK_LIST(args[0]);
+    CHECK_INDEX(args[1]);
+
+    list_t list = AS_LIST(args[0]);
+    int64_t i = AS_INDEX(args[1]);
+    int64_t count = ll_count(list);
+    if (i > count)
+        i = count;
+    if (i < -count - 1)
+        i = 0;
+
+    return wrap_list(ll_insert(list, args[2], i, vm->ctx.alloc), vm);
+}
 

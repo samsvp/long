@@ -75,7 +75,7 @@ list_t ll_prepend_arr(list_t, const value_t*, int64_t, const sv_allocator_t*);
 list_t ll_add(list_t, list_t, const sv_allocator_t*);
 
 /**
- * Inserts element at position
+ * Inserts element at position; negative positions count from the end, -1 appending.
  */
 list_t ll_insert(list_t, value_t, int64_t, const sv_allocator_t*);
 /**
@@ -83,7 +83,7 @@ list_t ll_insert(list_t, value_t, int64_t, const sv_allocator_t*);
  */
 list_t ll_update(list_t, value_t, int64_t, const sv_allocator_t*);
 /**
- * Deletes element at position
+ * Deletes element at position; negative positions count from the end.
  */
 list_t ll_delete_at(list_t, int64_t, const sv_allocator_t*);
 

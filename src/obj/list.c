@@ -304,7 +304,7 @@ list_t ll_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
     TRY_NOT_NULL(new_tail.cell); \
     return init_from_bucket(node.bucket, node.start, node.len, new_tail, a); \
 } while (0)
-list_t ll_insert(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
+static list_t ll_insert_impl(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
 {
     TRY_POSITIVE(i);
     if (i == 0)
@@ -312,7 +312,7 @@ list_t ll_insert(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
 
     node_t node = list.cell->value;
     if (i > node.len)
-        RETURN_RECURSIVE(ll_insert);
+        RETURN_RECURSIVE(ll_insert_impl);
 
     list_t head = sv_rc_borrow(node.tail);
 
@@ -325,6 +325,13 @@ list_t ll_insert(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
 error:
     ll_deinit(&head, a);
     return ERR_LIST;
+}
+
+list_t ll_insert(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
+{
+    if (i < 0)
+        i += ll_count(list) + 1;
+    return ll_insert_impl(list, v, i, a);
 }
 
 list_t ll_update(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
@@ -375,6 +382,8 @@ error:
 
 list_t ll_delete_at(list_t list, int64_t i, const sv_allocator_t* a)
 {
+    if (i < 0)
+        i += ll_count(list);
     return ll_delete_at_impl(list, NULL, i, a);
 }
 

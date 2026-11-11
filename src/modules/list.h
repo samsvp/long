@@ -44,6 +44,18 @@ value_t ntvl_remove(const value_t*, uint8_t, vm_t*);
  */
 value_t ntvl_remove_all(const value_t*, uint8_t, vm_t*);
 /**
+ * remove_at(list, index): removes the element at index; negative indices count from the end.
+ */
+value_t ntvl_remove_at(const value_t*, uint8_t, vm_t*);
+/**
+ * get(list, index): returns the element at index, or nil; negative indices count from the end.
+ */
+value_t ntvl_get(const value_t*, uint8_t, vm_t*);
+/**
+ * insert_at(list, index, value): inserts value at index; negative indices count from the end.
+ */
+value_t ntvl_insert_at(const value_t*, uint8_t, vm_t*);
+/**
  * zip(lst1, lst2): zips two lists into a tuple of every element. Both must have the same length.
  */
 value_t ntvl_zip(const value_t*, uint8_t, vm_t*);
