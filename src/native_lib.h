@@ -35,7 +35,7 @@ sv_vec_def(native_lib_t);
 sv_opt_t(error_t) native_lib_open(const char* path, const char* file, int64_t line, native_lib_t* out,
                                   const sv_allocator_t*);
 /**
- * Unloads the library. Its native functions must not be called afterwards.
+ * Unloads the library.
  */
 void native_lib_close(native_lib_t*);
 
