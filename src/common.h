@@ -27,7 +27,6 @@ typedef struct sv_rc_cell_t(obj_t) sv_rc_cell_t(obj_t);
 
 typedef struct record_t record_t;
 
-typedef struct vm_t vm_t;
 typedef struct vm_ctx_t vm_ctx_t;
 
 #endif

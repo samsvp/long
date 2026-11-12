@@ -9,6 +9,7 @@
 #include "common.h"
 #include "std/vector.h"
 #include "globals.h"
+#include "native_lib.h"
 
 typedef struct vm_t vm_t;
 
@@ -55,6 +56,7 @@ typedef struct vm_t {
 
     sv_vec_t(actor_vtable_t) actor_vtables;
     sv_vec_t(sv_str_t) files;
+    sv_vec_t(native_lib_t) native_libs;
 
     vm_ctx_t ctx;
 } vm_t;

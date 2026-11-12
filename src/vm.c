@@ -57,6 +57,9 @@ void vm_deinit(vm_t* vm)
     sv_vec_foreach(sv_str_t, f, &vm->files)
         sv_free(a, (char*)f.chars);
     sv_vec_deinit(&vm->files, a);
+    sv_vec_foreach(native_lib_t, lib, &vm->native_libs)
+        native_lib_close(&lib);
+    sv_vec_deinit(&vm->native_libs, a);
 }
 
 static call_frame_t init_frame(fn_t* fn, int64_t locals_offset, int64_t stack_offset,

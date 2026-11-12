@@ -1,7 +1,7 @@
 #include "long.h"
-#include "value.h"
 #include "obj.h"
-#include "obj/actor.h"
+#include "compiler.h"
+#include "std/allocator_std.h"
 
 bool long_is_nil(value_t v) { return IS_NIL(v); }
 bool long_is_number(value_t v) { return IS_NUMBER(v); }
@@ -60,4 +60,37 @@ value_t long_value_actor(value_t state, const actor_vtable_t* vtable, const sv_a
 {
     actor_t actor = actor_init(state, vtable);
     return value_wrap_actor(&actor, a);
+}
+
+static int run(vm_t* vm, ctx_t ctx)
+{
+    if (ctx.err.error_code != 0) {
+        if (ctx.err.msg.size > 0)
+            sv_log_error(&ctx.logger, "%.*s", (int)ctx.err.msg.size, ctx.err.msg.chars);
+        error_free(&ctx.err, &ctx.alloc);
+        return 1;
+    }
+
+    sv_opt_t(error_t) err = vm_run(vm);
+    if (err.is_some) {
+        sv_log_error(&ctx.logger, "%.*s%.*s", (int)err.value.msg.size, err.value.msg.chars,
+                     (int)err.value.trace.size, err.value.trace.chars);
+        error_free(&err.value, &ctx.alloc);
+        vm_deinit(vm);
+        return 1;
+    }
+
+    vm_deinit(vm);
+    return 0;
+}
+
+int long_run_file(const char* path)
+{
+    ctx_t ctx = {
+        .alloc = sv_gpa,
+        .logger = sv_std_logger,
+        .err = { 0 },
+    };
+    vm_t vm = compile(path, COMPILER_DEFAULT_OPTS, &ctx);
+    return run(&vm, ctx);
 }

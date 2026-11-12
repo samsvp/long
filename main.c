@@ -1,47 +1,5 @@
 #include <stdio.h>
-#define SV_IMPLEMENTATION
-#include "src/compiler.h"
-#include "src/std/allocator_std.h"
-
-static int run(vm_t* vm, ctx_t ctx)
-{
-    if (ctx.err.error_code != 0) {
-        if (ctx.err.msg.size > 0)
-            sv_log_error(&ctx.logger, "%.*s", (int)ctx.err.msg.size, ctx.err.msg.chars);
-        error_free(&ctx.err, &ctx.alloc);
-        return 1;
-    }
-
-    sv_opt_t(error_t) err = vm_run(vm);
-    if (err.is_some) {
-        sv_log_error(&ctx.logger, "%.*s%.*s", (int)err.value.msg.size, err.value.msg.chars,
-                     (int)err.value.trace.size, err.value.trace.chars);
-        error_free(&err.value, &ctx.alloc);
-        vm_deinit(vm);
-        return 1;
-    }
-
-    vm_deinit(vm);
-    return 0;
-}
-
-static int run_file(const char* path)
-{
-    ctx_t ctx = {
-        .alloc = sv_gpa,
-        .logger = sv_std_logger,
-        .err = { 0 },
-    };
-
-    vm_t vm = compile(path, COMPILER_DEFAULT_OPTS, &ctx);
-
-    int ret = run(&vm, ctx);
-    if (ret > 0) {
-        return ret;
-    }
-
-    return 0;
-}
+#include "src/long.h"
 
 int main(int argc, const char** argv)
 {
@@ -50,5 +8,5 @@ int main(int argc, const char** argv)
         return 0;
     }
 
-    return run_file(argv[1]);
+    return long_run_file(argv[1]);
 }

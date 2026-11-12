@@ -18,10 +18,12 @@
 #include "pattern_shape.h"
 #include "pattern_match.h"
 #include "deps/cwalk.h"
+#include "native_lib.h"
 
 static void compile_sexpr(compiler_t* c, sexpr_t sexpr, bool is_tail, ctx_t* ctx);
 static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx_t* ctx);
 static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, ctx_t* ctx);
+static void add_native_mod(compiler_t* c, native_module_t mod, ctx_t* ctx);
 
 typedef struct {
     const char* name;
@@ -122,6 +124,9 @@ static void compiler_abort(compiler_t* c, ctx_t* ctx)
     sv_vec_foreach(sv_str_t, f, c->files)
         sv_free(&ctx->alloc, (char*)f.chars);
     sv_vec_deinit(c->files, &ctx->alloc);
+    sv_vec_foreach(native_lib_t, lib, c->native_libs)
+        native_lib_close(&lib);
+    sv_vec_deinit(c->native_libs, &ctx->alloc);
 }
 
 _Noreturn static void compiler_file_error(ctx_t* ctx, const char* path, int64_t line, int err)
@@ -1113,6 +1118,7 @@ static void compile_fn_body(compiler_t* c, const sexpr_t* cls, const sexpr_t* pa
     fc->record_fields = c->record_fields;
     fc->atoms = c->atoms;
     fc->files = c->files;
+    fc->native_libs = c->native_libs;
     fc->builder.file = c->builder.file;
     fc->module_scope = c->module_scope;
     fc->outer_path = c->outer_path;
@@ -1600,6 +1606,37 @@ static void module_put(transient_hashmap_t* t, sv_str_t key, value_t value, ctx_
 }
 
 
+static bool file_exists(const char* path)
+{
+    FILE* file = fopen(path, "r");
+    if (file == NULL)
+        return false;
+    fclose(file);
+    return true;
+}
+
+/**
+ * Loads the native library and registers its functions under its path.
+ */
+static void import_native_lib(compiler_t* c, const char* path, int64_t line, ctx_t* ctx)
+{
+    native_lib_t lib;
+    error_t err = error_init();
+    if (!native_lib_open(path, &lib, &err, c->scratch)) {
+        char msg[FILENAME_MAX + 64];
+        snprintf(msg, sizeof(msg), "Cannot load native library '%s': %.*s", path,
+                 (int)err.msg.size, err.msg.chars);
+        compiler_error(ctx, C_ERR_NATIVE_LIB, line, msg);
+    }
+    int success = 0;
+    sv_vec_push(c->native_libs, lib, &success, &ctx->alloc);
+    if (!success) {
+        native_lib_close(&lib);
+        compiler_oom(ctx);
+    }
+    add_native_mod(c, (native_module_t){ path, lib.module.native_fns, lib.module.native_count }, ctx);
+}
+
 /* Compiles the module unless it already is, and binds its alias. Returns whether it was compiled now. */
 static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx_t* ctx)
 {
@@ -1616,13 +1653,29 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
     char* import_path = sv_str_to_c_str(literal, c->scratch);
     char import_full_path[FILENAME_MAX];
     cwk_path_join(current_dir, import_path, import_full_path, sizeof(import_full_path));
-    value_t literal_key = value_init_str(literal, c->scratch);
-    sv_opt_t(value_t) native = thm_get(c->modules.compiled_modules, literal_key);
-    sv_str_t full_path = native.is_some && IS_BOOL(native.value) ? literal : sv_str_init(import_full_path);
+    char lib_path[FILENAME_MAX + sizeof(NATIVE_LIB_EXT)];
+    snprintf(lib_path, sizeof(lib_path), "%s" NATIVE_LIB_EXT, import_full_path);
+
+    // a source file wins over a native library, which wins over a built-in native module
+    bool is_lib = false;
+    sv_str_t full_path = sv_str_init(import_full_path);
+    if (!file_exists(import_full_path)) {
+        is_lib = file_exists(lib_path);
+        if (is_lib) {
+            full_path = sv_str_init(lib_path);
+        } else {
+            value_t literal_key = value_init_str(literal, c->scratch);
+            sv_opt_t(value_t) native = thm_get(c->modules.compiled_modules, literal_key);
+            if (native.is_some && IS_BOOL(native.value))
+                full_path = literal;
+        }
+    }
     value_t path_key = value_init_str(full_path, c->scratch);
 
     bool is_new = !thm_get(c->modules.compiled_modules, path_key).is_some;
-    if (is_new) {
+    if (is_new && is_lib) {
+        import_native_lib(c, lib_path, line, ctx);
+    } else if (is_new) {
         if (thm_get(c->modules.to_be_compiled_modules, path_key).is_some)
             compiler_error(ctx, C_ERR_IMPORT_CICLE, line, "Import cicle detected");
         module_put(&c->modules.to_be_compiled_modules, full_path, value_nil, ctx);
@@ -1791,10 +1844,13 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     transient_hashmap_t* atoms = sv_arena_calloc(arena, sizeof(transient_hashmap_t));
     sv_vec_t(sv_str_t)* file_names = sv_arena_malloc(arena, sizeof(*file_names));
     *file_names = sv_vec_init(sv_str_t);
+    sv_vec_t(native_lib_t)* native_libs = sv_arena_malloc(arena, sizeof(*native_libs));
+    *native_libs = sv_vec_init(native_lib_t);
     compiler_t* c = compiler_init("", arena, scratch, ctx);
     c->record_fields = record_fields;
     c->atoms = atoms;
     c->files = file_names;
+    c->native_libs = native_libs;
     compiler = c;
 
     /* Reserved for the ids map iteration builds its records with. */
@@ -1917,6 +1973,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
     vm.globals = c->global_values;
     vm.actor_vtables = c->actor_vtables;
     vm.files = *c->files;
+    vm.native_libs = *c->native_libs;
     vm.ctx.alloc = &ctx->alloc;
     modules_deinit(c, ctx);
 

@@ -29,6 +29,7 @@ typedef struct record_t record_t;
 typedef struct tuple_t tuple_t;
 typedef struct actor_t actor_t;
 typedef struct actor_vtable_t actor_vtable_t;
+typedef struct vm_t vm_t;
 // ref cell types
 typedef struct rc_node_t_t list_t;
 typedef struct rc_map_node_t_t hashmap_t;
@@ -41,6 +42,12 @@ typedef struct rc_map_node_t_t hashmap_t;
   #endif
 #else
   #define LONG_API __attribute__((visibility("default")))
+#endif
+
+#if defined(_WIN32)
+  #define LONG_MODULE_API __declspec(dllexport)
+#else
+  #define LONG_MODULE_API __attribute__((visibility("default")))
 #endif
 
 #ifndef LONG_NAN_BOXING
@@ -70,6 +77,23 @@ typedef struct value_t {
 } value_t;
 
 #endif
+
+typedef struct native_fn_t {
+    value_t (*fn) (const value_t*, uint8_t, vm_t*);
+    uint8_t arity;
+    const char* name;
+} native_fn_t;
+
+typedef struct native_module_t {
+    const char* name;
+    native_fn_t* native_fns;
+    int native_count;
+} native_module_t;
+
+/**
+ * Entry point every native module library defines. Returns the module's functions.
+ */
+LONG_MODULE_API const native_module_t* long_module_init(void);
 
 LONG_API bool long_is_nil(value_t);
 LONG_API bool long_is_number(value_t);
@@ -108,5 +132,10 @@ LONG_API value_t long_value_tuple(const value_t*, uint8_t, const sv_allocator_t*
 // Initializes a new map from the (key, values) pair array.
 LONG_API value_t long_value_map(const value_t*, int64_t, const sv_allocator_t*);
 LONG_API value_t long_value_actor(value_t, const actor_vtable_t*, const sv_allocator_t*);
+
+/**
+ * Compiles and runs the file, logging errors to stderr. Returns 0 on success, 1 on failure.
+ */
+LONG_API int long_run_file(const char* path);
 
 #endif

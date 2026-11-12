@@ -4,7 +4,7 @@
 #include "ctx.h"
 #include "vm.h"
 #include "obj/map.h"
-#include "obj/native_fns.h"
+#include "long.h"
 #include "globals.h"
 #include "std/arena.h"
 
@@ -48,6 +48,7 @@ typedef struct compiler_t {
     sv_vec_t(value_t) global_values;
     sv_vec_t(actor_vtable_t) actor_vtables;
     sv_vec_t(sv_str_t)* files;
+    sv_vec_t(native_lib_t)* native_libs;
 
     sv_arena_t* arena;
     const sv_allocator_t* scratch;  // the arena as an allocator
@@ -86,6 +87,7 @@ typedef enum {
     C_ERR_JUMP_TOO_LONG,
     C_ERR_LIMIT_EXCEEDED,
     C_ERR_FILE,
+    C_ERR_NATIVE_LIB,
 } compiler_error_kind;
 
 #endif

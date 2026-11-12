@@ -9,7 +9,6 @@
 #include "std/option.h"
 #include "std/string.h"
 #include "std/allocator.h"
-#include "obj/native_fns.h"
 #include "obj/closure.h"
 #include "obj/list.h"
 #include "error.h"

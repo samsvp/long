@@ -1,4 +1,3 @@
-#define SV_IMPLEMENTATION
 #include "../src/std/arena.h"
 #include "../src/std/test.h"
 #include "arena.h"

@@ -8,7 +8,6 @@
 #include "value.h"
 #include "error.h"
 #include "obj/closure.h"
-#include "obj/native_fns.h"
 #include "obj/record.h"
 #include "obj/tuple.h"
 
