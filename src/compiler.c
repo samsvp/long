@@ -1621,12 +1621,10 @@ static bool file_exists(const char* path)
 static void import_native_lib(compiler_t* c, const char* path, int64_t line, ctx_t* ctx)
 {
     native_lib_t lib;
-    error_t err = error_init();
-    if (!native_lib_open(path, &lib, &err, c->scratch)) {
-        char msg[FILENAME_MAX + 64];
-        snprintf(msg, sizeof(msg), "Cannot load native library '%s': %.*s", path,
-                 (int)err.msg.size, err.msg.chars);
-        compiler_error(ctx, C_ERR_NATIVE_LIB, line, msg);
+    sv_opt_t(error_t) err = native_lib_open(path, ctx->file, line, &lib, &ctx->alloc);
+    if (err.is_some) {
+        ctx->err = err.value;
+        longjmp(*ctx->on_error, 2);
     }
     int success = 0;
     sv_vec_push(c->native_libs, lib, &success, &ctx->alloc);

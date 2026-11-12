@@ -11,16 +11,15 @@
 typedef const native_module_t* (*module_init_fn)(void);
 
 #if defined(_WIN32)
-static bool open_error(error_t* err, const sv_allocator_t* a)
+static char open_err[256];
+
+static const char* open_error(void)
 {
-    char msg[256];
     DWORD n = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-                             GetLastError(), 0, msg, sizeof(msg), NULL);
-    if (n == 0)
-        return error_set(err, NATIVE_LIB_ERR_OPEN, "Native library could not be loaded", a);
-    while (n > 0 && (msg[n - 1] == '\n' || msg[n - 1] == '\r'))
-        msg[--n] = '\0';
-    return error_set(err, NATIVE_LIB_ERR_OPEN, msg, a);
+                             GetLastError(), 0, open_err, sizeof(open_err), NULL);
+    while (n > 0 && (open_err[n - 1] == '\n' || open_err[n - 1] == '\r'))
+        open_err[--n] = '\0';
+    return n > 0 ? open_err : "unknown error";
 }
 
 static void unload(void* handle)
@@ -28,9 +27,9 @@ static void unload(void* handle)
     FreeLibrary((HMODULE)handle);
 }
 #else
-static bool open_error(error_t* err, const sv_allocator_t* a)
+static const char* open_error(void)
 {
-    return error_set(err, NATIVE_LIB_ERR_OPEN, dlerror(), a);
+    return dlerror();
 }
 
 static void unload(void* handle)
@@ -39,42 +38,38 @@ static void unload(void* handle)
 }
 #endif
 
-bool native_lib_open(const char* path, native_lib_t* out, error_t* err, const sv_allocator_t* a)
+sv_opt_t(error_t) native_lib_open(const char* path, const char* file, int64_t line, native_lib_t* out,
+                                  const sv_allocator_t* a)
 {
+    char local[FILENAME_MAX];
 #if defined(_WIN32)
-    char local[FILENAME_MAX];
-    if (strpbrk(path, "/\\") == NULL) {
-        snprintf(local, sizeof(local), ".\\%s", path);
-        path = local;
-    }
-    HMODULE handle = LoadLibraryA(path);
-    if (handle == NULL)
-        return open_error(err, a);
-    module_init_fn init = (module_init_fn)(void (*)(void))GetProcAddress(handle, "long_module_init");
+    snprintf(local, sizeof(local), ".\\%s", path);
+    HMODULE handle = LoadLibraryA(strpbrk(path, "/\\") != NULL ? path : local);
+    module_init_fn init = handle == NULL ? NULL
+        : (module_init_fn)(void (*)(void))GetProcAddress(handle, "long_module_init");
 #else
-    char local[FILENAME_MAX];
-    if (strchr(path, '/') == NULL) {
-        snprintf(local, sizeof(local), "./%s", path);
-        path = local;
-    }
-    void* handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-    if (handle == NULL)
-        return open_error(err, a);
-    void* sym = dlsym(handle, "long_module_init");
+    snprintf(local, sizeof(local), "./%s", path);
+    void* handle = dlopen(strchr(path, '/') != NULL ? path : local, RTLD_NOW | RTLD_LOCAL);
+    void* sym = handle == NULL ? NULL : dlsym(handle, "long_module_init");
     module_init_fn init;
     memcpy(&init, &sym, sizeof(init));
 #endif
+    if (handle == NULL)
+        return sv_opt_some_t(error_t, error_fmt(NATIVE_LIB_ERR_OPEN, file, line, a,
+                                                "Cannot load native library '%s': %s", path, open_error()));
     if (init == NULL) {
         unload((void*)handle);
-        return error_set(err, NATIVE_LIB_ERR_NO_INIT, "Native library has no long_module_init", a);
+        return sv_opt_some_t(error_t, error_fmt(NATIVE_LIB_ERR_NO_INIT, file, line, a,
+                                                "Native library '%s' has no long_module_init", path));
     }
     const native_module_t* module = init();
     if (module == NULL) {
         unload((void*)handle);
-        return error_set(err, NATIVE_LIB_ERR_NO_MODULE, "long_module_init returned no module", a);
+        return sv_opt_some_t(error_t, error_fmt(NATIVE_LIB_ERR_NO_MODULE, file, line, a,
+                                                "Native library '%s' returned no module", path));
     }
     *out = (native_lib_t){ .handle = (void*)handle, .module = *module };
-    return true;
+    return sv_opt_none_t(error_t);
 }
 
 void native_lib_close(native_lib_t* lib)

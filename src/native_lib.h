@@ -3,6 +3,7 @@
 
 #include "long.h"
 #include "error.h"
+#include "std/option.h"
 #include "std/vector.h"
 
 #if defined(_WIN32)
@@ -29,9 +30,10 @@ sv_vec_def(native_lib_t);
 
 /**
  * Loads the shared library at the path and reads its module. A path without a directory is
- * looked up in the current directory. Returns false and fills err on failure.
+ * looked up in the current directory. On failure, returns the error located at file and line.
  */
-bool native_lib_open(const char* path, native_lib_t* out, error_t* err, const sv_allocator_t*);
+sv_opt_t(error_t) native_lib_open(const char* path, const char* file, int64_t line, native_lib_t* out,
+                                  const sv_allocator_t*);
 /**
  * Unloads the library. Its native functions must not be called afterwards.
  */
