@@ -6,6 +6,7 @@
  */
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef enum {
@@ -30,6 +31,7 @@ typedef struct tuple_t tuple_t;
 typedef struct actor_t actor_t;
 typedef struct actor_vtable_t actor_vtable_t;
 typedef struct vm_t vm_t;
+typedef struct vm_ctx_t vm_ctx_t;
 // ref cell types
 typedef struct rc_node_t_t list_t;
 typedef struct rc_map_node_t_t hashmap_t;
@@ -74,6 +76,19 @@ typedef struct value_t {
 
 #endif
 
+typedef struct user_value_vtable_t {
+    // true if two values are equal
+    bool (*eql_fn)(void*, void*);
+    // free the value
+    void (*free_fn)(void*, const sv_allocator_t*);
+    // writes the field to out as a borrowed value, false if there is no such field
+    bool (*get_field_fn)(void*, uint32_t index, value_t* out, const vm_ctx_t*);
+    // string value for printing
+    value_t (*to_string_fn)(void*, const vm_ctx_t*);
+    // hash function for hashmaps
+    uint32_t (*hash_fn)(void*);
+} user_value_vtable_t;
+
 typedef struct native_fn_t {
     value_t (*fn) (const value_t*, uint8_t, vm_t*);
     uint8_t arity;
@@ -104,6 +119,7 @@ LONG_API bool long_is_atom(value_t);
 LONG_API bool long_is_actor(value_t);
 LONG_API bool long_is_falsey(value_t);
 LONG_API bool long_is_function(value_t);
+LONG_API bool long_is_user(value_t);
 
 LONG_API double long_as_number(value_t);
 LONG_API bool long_as_bool(value_t);
@@ -114,6 +130,14 @@ LONG_API const record_t* long_as_record(value_t);
 LONG_API const tuple_t* long_as_tuple(value_t);
 LONG_API const hashmap_t* long_as_map(value_t);
 LONG_API const actor_t* long_as_actor(value_t);
+/**
+ * The user value's pointer if it was created with the vtable, NULL otherwise.
+ */
+LONG_API void* long_as_user(value_t, const user_value_vtable_t*);
+
+LONG_API value_t long_value_nil(void);
+LONG_API value_t long_value_oom(void);
+LONG_API bool long_is_oom(value_t);
 
 LONG_API value_t long_value_number(double);
 LONG_API value_t long_value_bool(bool);
@@ -128,6 +152,33 @@ LONG_API value_t long_value_tuple(const value_t*, uint8_t, const sv_allocator_t*
 // Initializes a new map from the (key, values) pair array.
 LONG_API value_t long_value_map(const value_t*, int64_t, const sv_allocator_t*);
 LONG_API value_t long_value_actor(value_t, const actor_vtable_t*, const sv_allocator_t*);
+/**
+ * Wraps the pointer in a user value. On failure, frees the pointer with the vtable's free_fn.
+ */
+LONG_API value_t long_value_user(void*, const user_value_vtable_t*, uint32_t tag, const char* name,
+                                 const sv_allocator_t*);
+LONG_API void long_value_free(value_t*, const sv_allocator_t*);
+/**
+ * The error a native returns when an argument is not of the expected type.
+ */
+LONG_API value_t long_type_error(value_t arg, const char* expected, const vm_t*);
+
+/**
+ * The source name of the field with the index, for get_field_fn.
+ */
+LONG_API const char* long_field_name(const vm_ctx_t*, uint32_t index);
+/**
+ * A NUL-terminated copy of the string, freed with long_free.
+ */
+LONG_API char* long_str_to_c(const sv_str_t*, const sv_allocator_t*);
+
+/**
+ * The allocator the VM allocates and frees values with.
+ */
+LONG_API const sv_allocator_t* long_allocator(const vm_t*);
+LONG_API const sv_allocator_t* long_ctx_allocator(const vm_ctx_t*);
+LONG_API void* long_alloc(const sv_allocator_t*, size_t);
+LONG_API void long_free(const sv_allocator_t*, void*);
 
 /**
  * Compiles and runs the file, logging errors to stderr. Returns 0 on success, 1 on failure.

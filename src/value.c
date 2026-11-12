@@ -284,6 +284,8 @@ const char* value_kind_str(value_kind v_kind, obj_kind o_kind)
 
 const char* value_type_name(value_t v)
 {
+    if (IS_USER_VALUE(v))
+        return AS_USER_VALUE(v).name;
     return value_kind_str(VALUE_KIND(v), VALUE_KIND(v) == VALUE_OBJ ? AS_OBJ(v).cell->value.kind : 0);
 }
 
@@ -397,11 +399,10 @@ bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
             return sv_strb_add(b, "}", 1, a) >= 0;
         }
         case OBJ_USER_VALUE: {
-            sv_str_t s = uv_string(AS_OBJ(v).cell->value.uservalue, ctx);
-            CHECK(s.chars != NULL);
-            int n = sv_strb_add(b, s.chars, s.size, a);
-            sv_str_deinit(&s, ctx->alloc);
-            return n >= 0;
+            value_t s = uv_string(AS_OBJ(v).cell->value.uservalue, ctx);
+            bool ok = IS_STR(s) && sv_strb_add(b, AS_STR(s).chars, AS_STR(s).size, a) >= 0;
+            value_free(&s, a);
+            return ok;
         }
         case OBJ_ERR: {
             error_t e = AS_ERR(v);

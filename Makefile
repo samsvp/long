@@ -10,23 +10,35 @@ LIB_LDFLAGS = -Wl,--out-implib,build/lib$(TARGET).dll.a
 EXE_LDFLAGS =
 PIC =
 LDLIBS = -lm
+MOD_EXT = .dll
+MOD_LDFLAGS =
+RAYLIB_LIBS ?= -lraylib -lopengl32 -lgdi32 -lwinmm
 else ifeq ($(shell uname -s),Darwin)
 LIB = build/lib$(TARGET).dylib
 LIB_LDFLAGS = -install_name @rpath/lib$(TARGET).dylib
 EXE_LDFLAGS = -Wl,-rpath,@executable_path
 PIC = -fPIC
 LDLIBS = -lm
+MOD_EXT = .so
+MOD_LDFLAGS = -Wl,-rpath,@loader_path/..
+RAYLIB_LIBS ?= -Wl,-hidden-lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
 else
 LIB = build/lib$(TARGET).so
 LIB_LDFLAGS =
 EXE_LDFLAGS = -Wl,-rpath,'$$ORIGIN'
 PIC = -fPIC
 LDLIBS = -lm -ldl
+MOD_EXT = .so
+MOD_LDFLAGS = -Wl,-rpath,'$$ORIGIN/..' -Wl,--exclude-libs,ALL
+RAYLIB_LIBS ?= -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 endif
+
+RAYLIB_CFLAGS ?=
 
 RELEASE_FLAGS = $(STD) $(WARN) -O3 -flto=auto -fvisibility=hidden $(PIC)
 TEST_FLAGS = $(STD) $(WARN) -O0 -g -fno-omit-frame-pointer $(SAN) -DSV_ARENA_POISON
 DEBUG_FLAGS = $(STD) $(WARN) -O0 -g -fno-omit-frame-pointer $(SAN) -DSV_ARENA_POISON
+MOD_FLAGS = $(STD) $(WARN) -O2 -shared -fvisibility=hidden $(PIC)
 DEPFLAGS = -MMD -MP
 
 LIB_SRC = $(wildcard src/*.c) $(wildcard src/obj/*.c) $(wildcard src/deps/*.c) $(wildcard src/modules/*.c)
@@ -42,7 +54,7 @@ BIN = build/$(TARGET)
 TEST_BIN = build/$(TARGET)-test
 DEBUG_BIN = build/$(TARGET)-debug
 
-.PHONY: build run test debug clean static shared
+.PHONY: build run test debug clean static shared vendor
 
 build: $(BIN)
 
@@ -60,6 +72,8 @@ static: $(LIB_OBJ)
 
 shared: $(LIB)
 
+vendor: build/vendor/raylib$(MOD_EXT)
+
 clean:
 	rm -rf build
 
@@ -68,6 +82,10 @@ $(LIB): $(LIB_OBJ)
 
 $(BIN): build/release/main.o $(LIB)
 	$(CC) $(RELEASE_FLAGS) $(EXE_LDFLAGS) $< -Lbuild -l$(TARGET) -o $@ $(LDLIBS)
+
+build/vendor/raylib$(MOD_EXT): vendor/raylib/raylib.c src/long.h $(LIB)
+	@mkdir -p $(@D)
+	$(CC) $(MOD_FLAGS) $(RAYLIB_CFLAGS) -Isrc $< -Lbuild -l$(TARGET) $(MOD_LDFLAGS) $(RAYLIB_LIBS) -o $@
 
 $(TEST_BIN): $(TEST_OBJ)
 	$(CC) $(TEST_FLAGS) $^ -o $@ $(LDLIBS)

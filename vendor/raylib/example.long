@@ -1,0 +1,18 @@
+import rl("../../build/vendor/raylib")
+
+fun loop(x) do
+    if rl::WindowShouldClose() do
+        rl::CloseWindow()
+    else
+        rl::BeginDrawing()
+        rl::ClearBackground(rl::RAYWHITE())
+        rl::DrawText("Hello from long", 190, 200, 20, rl::DARKGRAY())
+        rl::DrawCircleV(rl::Vector2(x, 300), 30, rl::RED())
+        rl::EndDrawing()
+        loop((x + 4) % 800)
+    end
+end
+
+rl::InitWindow(800, 450, "long + raylib")
+rl::SetTargetFPS(60)
+loop(0)

@@ -12,12 +12,17 @@ bool uv_eql(user_value_t v1, user_value_t v2)
 }
 
 sv_opt_t(value_t) uv_field(user_value_t v, uint32_t index, const vm_ctx_t* ctx)
-{ return v.vtable->get_field_fn(v.value, index, ctx); }
+{
+    value_t out;
+    if (!v.vtable->get_field_fn(v.value, index, &out, ctx))
+        return sv_opt_none_t(value_t);
+    return sv_opt_some_t(value_t, out);
+}
 
 void uv_free(user_value_t v, const sv_allocator_t* a)
 { v.vtable->free_fn(v.value, a); }
 
-sv_str_t uv_string(user_value_t v, const vm_ctx_t* ctx)
+value_t uv_string(user_value_t v, const vm_ctx_t* ctx)
 { return v.vtable->to_string_fn(v.value, ctx); }
 
 uint32_t uv_hash(user_value_t uv)
