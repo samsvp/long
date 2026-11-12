@@ -22,7 +22,7 @@ BIN = build/$(TARGET)
 TEST_BIN = build/$(TARGET)-test
 DEBUG_BIN = build/$(TARGET)-debug
 
-.PHONY: build run test debug clean static
+.PHONY: build run test debug clean static shared
 
 build: $(BIN)
 
@@ -37,6 +37,9 @@ debug: $(DEBUG_BIN)
 static: $(LIB_OBJ)
 	rm -f $(TARGET).a
 	ar rcs $(TARGET).a $^
+
+shared: $(LIB_OBJ)
+	$(CC) $(RELEASE_FLAGS) -shared $^ -o lib$(TARGET).so -lm
 
 clean:
 	rm -rf build

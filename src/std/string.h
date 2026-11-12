@@ -4,7 +4,7 @@
 #include "vector.h"
 #include <stdbool.h>
 
-typedef struct {
+typedef struct sv_str_t {
    int64_t size;
    const char* chars;
 } sv_str_t;

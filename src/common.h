@@ -4,6 +4,7 @@
 #include "std/option.h"
 #include "std/vector.h"
 #include "std/rc.h"
+#include "long.h"
 
 typedef struct actor_t actor_t;
 typedef struct fn_t fn_t;
@@ -23,7 +24,6 @@ typedef sv_rc_t(map_node_t) hashmap_t;
 
 typedef struct obj_t obj_t;
 typedef struct sv_rc_cell_t(obj_t) sv_rc_cell_t(obj_t);
-sv_rc_wrapper_def(obj_t);
 
 typedef struct record_t record_t;
 

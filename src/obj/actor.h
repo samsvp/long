@@ -5,7 +5,7 @@
 #include "../common.h"
 #include "../std/allocator.h"
 
-typedef struct {
+typedef struct actor_vtable_t {
     const char* name;
     value_t update_fn;
     value_t get_fn;

@@ -13,7 +13,7 @@ typedef struct {
    sv_realloc_fn realloc;
 } sv_allocator_vtable;
 
-typedef struct {
+typedef struct sv_allocator_t {
    const sv_allocator_vtable* vtable;
    void* self;
 } sv_allocator_t;

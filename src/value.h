@@ -14,30 +14,9 @@
 #include "obj/list.h"
 #include "error.h"
 #include "obj/user_value.h"
-
-typedef enum {
-    VALUE_NUMBER,
-    VALUE_ATOM,
-    VALUE_NIL,
-    VALUE_BOOL,
-    VALUE_C,
-    VALUE_UNDEFINED,
-    VALUE_OBJ,
-} value_kind;
-
-#ifndef LONG_NAN_BOXING
-  #if UINTPTR_MAX == UINT64_MAX
-    #define LONG_NAN_BOXING 1
-  #else
-    #define LONG_NAN_BOXING 0
-  #endif
-#endif
+#include "long.h"
 
 #if LONG_NAN_BOXING
-
-typedef struct value_t {
-    uint64_t bits;
-} value_t;
 
 #define VALUE_QNAN ((uint64_t)0x7ffc000000000000)
 #define VALUE_SIGN ((uint64_t)0x8000000000000000)
@@ -96,16 +75,6 @@ static const value_t value_true = { VALUE_TRUE_BITS };
 static const value_t value_false = { VALUE_FALSE_BITS };
 
 #else
-
-typedef struct value_t {
-    value_kind kind;
-    union {
-        double number;
-        bool boolean;
-        void* c;
-        sv_rc_t(obj_t) obj;
-    };
-} value_t;
 
 #define VALUE_KIND(v) ((v).kind)
 #define IS_OBJ(v) ((v).kind == VALUE_OBJ)
