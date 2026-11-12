@@ -1656,54 +1656,51 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
     char lib_path[FILENAME_MAX + sizeof(NATIVE_LIB_EXT)];
     snprintf(lib_path, sizeof(lib_path), "%s" NATIVE_LIB_EXT, import_full_path);
 
-    // a source file wins over a native library, which wins over a built-in native module
-    bool is_lib = false;
-    sv_str_t full_path = sv_str_init(import_full_path);
-    if (!file_exists(import_full_path)) {
-        is_lib = file_exists(lib_path);
-        if (is_lib) {
-            full_path = sv_str_init(lib_path);
-        } else {
-            value_t literal_key = value_init_str(literal, c->scratch);
-            sv_opt_t(value_t) native = thm_get(c->modules.compiled_modules, literal_key);
-            if (native.is_some && IS_BOOL(native.value))
-                full_path = literal;
-        }
-    }
-    value_t path_key = value_init_str(full_path, c->scratch);
+    bool is_new = false;
+    value_t literal_key = value_init_str(literal, c->scratch);
+    sv_opt_t(value_t) native = thm_get(c->modules.compiled_modules, literal_key);
+    sv_str_t full_path = native.is_some && IS_BOOL(native.value) ? literal : sv_str_init(import_full_path);
 
-    bool is_new = !thm_get(c->modules.compiled_modules, path_key).is_some;
-    if (is_new && is_lib) {
+    if (file_exists(lib_path)) {
+        full_path = sv_str_init(lib_path);
         native_lib_t lib;
-        sv_opt_t(error_t) err = native_lib_open(lib_path, ctx->file, line, &lib, &ctx->alloc);
-        if (err.is_some) {
-            ctx->err = err.value;
-            longjmp(*ctx->on_error, 2);
+        value_t path_key = value_init_str(full_path, c->scratch);
+        is_new = !thm_get(c->modules.compiled_modules, path_key).is_some;
+        if (is_new) {
+            sv_opt_t(error_t) err = native_lib_open(lib_path, ctx->file, line, &lib, &ctx->alloc);
+            if (err.is_some) {
+                ctx->err = err.value;
+                longjmp(*ctx->on_error, 2);
+            }
+            int success = 0;
+            sv_vec_push(&c->native_libs, lib, &success, &ctx->alloc);
+            if (!success) {
+                native_lib_close(&lib);
+                compiler_oom(ctx);
+            }
+            add_native_mod(c, (native_module_t){ lib_path, lib.module.native_fns, lib.module.native_count }, ctx);
         }
-        int success = 0;
-        sv_vec_push(&c->native_libs, lib, &success, &ctx->alloc);
-        if (!success) {
-            native_lib_close(&lib);
-            compiler_oom(ctx);
+    } else {
+        value_t path_key = value_init_str(full_path, c->scratch);
+        is_new = !thm_get(c->modules.compiled_modules, path_key).is_some;
+        if (is_new) {
+            if (thm_get(c->modules.to_be_compiled_modules, path_key).is_some)
+                compiler_error(ctx, C_ERR_IMPORT_CICLE, line, "Import cicle detected");
+            module_put(&c->modules.to_be_compiled_modules, full_path, value_nil, ctx);
+
+            char* source_code = read_file(ctx, import_full_path, line, c->scratch);
+
+            const char* current_path = c->current_path;
+            c->current_path = import_full_path;
+            uint32_t file = enter_file(c, import_full_path, ctx);
+            if (compile_source(c, source_code, ctx))
+                emit(c, ctx, OP_POP, 0);
+            leave_file(c, file, ctx);
+            c->current_path = current_path;
+
+            module_put(&c->modules.compiled_modules, full_path, value_nil, ctx);
+            thm_delete(&c->modules.to_be_compiled_modules, path_key, &ctx->alloc);
         }
-        add_native_mod(c, (native_module_t){ lib_path, lib.module.native_fns, lib.module.native_count }, ctx);
-    } else if (is_new) {
-        if (thm_get(c->modules.to_be_compiled_modules, path_key).is_some)
-            compiler_error(ctx, C_ERR_IMPORT_CICLE, line, "Import cicle detected");
-        module_put(&c->modules.to_be_compiled_modules, full_path, value_nil, ctx);
-
-        char* source_code = read_file(ctx, import_full_path, line, c->scratch);
-
-        const char* current_path = c->current_path;
-        c->current_path = import_full_path;
-        uint32_t file = enter_file(c, import_full_path, ctx);
-        if (compile_source(c, source_code, ctx))
-            emit(c, ctx, OP_POP, 0);
-        leave_file(c, file, ctx);
-        c->current_path = current_path;
-
-        module_put(&c->modules.compiled_modules, full_path, value_nil, ctx);
-        thm_delete(&c->modules.to_be_compiled_modules, path_key, &ctx->alloc);
     }
 
     value_t path_value = value_init_str(full_path, &ctx->alloc);
