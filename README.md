@@ -98,7 +98,6 @@ and `vm.h` headers in your application to start running lóng from your applicat
 ## Embedding
 Take the sample code on how embedding is done
 ```c
-#define SV_IMPLEMENTATION
 #include "long/src/compiler.h"
 #include "long/src/value.h"
 #include "long/src/std/allocator_std.h"

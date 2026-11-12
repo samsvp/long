@@ -1,5 +1,4 @@
 #include "long.h"
-#include "obj.h"
 #include "compiler.h"
 #include "std/allocator_std.h"
 
@@ -62,8 +61,10 @@ value_t long_value_actor(value_t state, const actor_vtable_t* vtable, const sv_a
     return value_wrap_actor(&actor, a);
 }
 
-static int run(vm_t* vm, ctx_t ctx)
+int long_run_file(const char* path)
 {
+    ctx_t ctx = { .alloc = sv_gpa, .logger = sv_std_logger };
+    vm_t vm = compile(path, COMPILER_DEFAULT_OPTS, &ctx);
     if (ctx.err.error_code != 0) {
         if (ctx.err.msg.size > 0)
             sv_log_error(&ctx.logger, "%.*s", (int)ctx.err.msg.size, ctx.err.msg.chars);
@@ -71,26 +72,15 @@ static int run(vm_t* vm, ctx_t ctx)
         return 1;
     }
 
-    sv_opt_t(error_t) err = vm_run(vm);
+    sv_opt_t(error_t) err = vm_run(&vm);
     if (err.is_some) {
         sv_log_error(&ctx.logger, "%.*s%.*s", (int)err.value.msg.size, err.value.msg.chars,
                      (int)err.value.trace.size, err.value.trace.chars);
         error_free(&err.value, &ctx.alloc);
-        vm_deinit(vm);
+        vm_deinit(&vm);
         return 1;
     }
 
-    vm_deinit(vm);
+    vm_deinit(&vm);
     return 0;
-}
-
-int long_run_file(const char* path)
-{
-    ctx_t ctx = {
-        .alloc = sv_gpa,
-        .logger = sv_std_logger,
-        .err = { 0 },
-    };
-    vm_t vm = compile(path, COMPILER_DEFAULT_OPTS, &ctx);
-    return run(&vm, ctx);
 }

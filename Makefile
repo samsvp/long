@@ -67,7 +67,7 @@ $(LIB): $(LIB_OBJ)
 	$(CC) $(RELEASE_FLAGS) -shared $(LIB_LDFLAGS) $^ -o $@ $(LDLIBS)
 
 $(BIN): build/release/main.o $(LIB)
-	$(CC) $(RELEASE_FLAGS) $(EXE_LDFLAGS) build/release/main.o -Lbuild -l$(TARGET) -o $@ $(LDLIBS)
+	$(CC) $(RELEASE_FLAGS) $(EXE_LDFLAGS) $< -Lbuild -l$(TARGET) -o $@ $(LDLIBS)
 
 $(TEST_BIN): $(TEST_OBJ)
 	$(CC) $(TEST_FLAGS) $^ -o $@ $(LDLIBS)
@@ -89,14 +89,14 @@ build/test/tests_%.o: tests/%.c
 
 build/test/%.o: src/%.c
 	@mkdir -p $(@D)
-	$(CC) $(TEST_FLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CC) $(TEST_FLAGS) -DLONG_BUILD $(DEPFLAGS) -c $< -o $@
 
 build/debug/main.o: main.c
 	@mkdir -p $(@D)
-	$(CC) $(DEBUG_FLAGS) $(DEPFLAGS) -Isrc -c $< -o $@
+	$(CC) $(DEBUG_FLAGS) -DLONG_BUILD $(DEPFLAGS) -Isrc -c $< -o $@
 
 build/debug/%.o: src/%.c
 	@mkdir -p $(@D)
-	$(CC) $(DEBUG_FLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CC) $(DEBUG_FLAGS) -DLONG_BUILD $(DEPFLAGS) -c $< -o $@
 
 -include $(OBJ:.o=.d) $(TEST_OBJ:.o=.d) $(DEBUG_OBJ:.o=.d)

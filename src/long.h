@@ -2,7 +2,7 @@
 #define LONG_H
 
 /**
- * Public API for C modules.
+ * Public API for native modules and embedders.
  */
 
 #include <stdbool.h>
@@ -40,13 +40,9 @@ typedef struct rc_map_node_t_t hashmap_t;
   #else
     #define LONG_API __declspec(dllimport)
   #endif
-#else
-  #define LONG_API __attribute__((visibility("default")))
-#endif
-
-#if defined(_WIN32)
   #define LONG_MODULE_API __declspec(dllexport)
 #else
+  #define LONG_API __attribute__((visibility("default")))
   #define LONG_MODULE_API __attribute__((visibility("default")))
 #endif
 

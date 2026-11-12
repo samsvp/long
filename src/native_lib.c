@@ -80,5 +80,4 @@ bool native_lib_open(const char* path, native_lib_t* out, error_t* err, const sv
 void native_lib_close(native_lib_t* lib)
 {
     unload(lib->handle);
-    lib->handle = NULL;
 }
