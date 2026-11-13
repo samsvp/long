@@ -72,7 +72,41 @@ bool value_obj_eql(value_t x, value_t y)
     return false;
 }
 
+#define FREE_DEPTH_MAX 256
+#define DEFERRED_MAX 1024
+
+static int free_depth;
+static obj_t deferred[DEFERRED_MAX];
+static int deferred_size;
+
+static void obj_free_now(obj_t* o, const sv_allocator_t* a);
+
+/**
+ * Frees nested objects past FREE_DEPTH_MAX after the outermost free returns, so deep
+ * structures do not overflow the C stack.
+ */
 static void obj_free(obj_t* o, const sv_allocator_t* a)
+{
+    if (free_depth >= FREE_DEPTH_MAX && deferred_size < DEFERRED_MAX) {
+        deferred[deferred_size++] = *o;
+        return;
+    }
+
+    free_depth++;
+    obj_free_now(o, a);
+    free_depth--;
+
+    if (free_depth > 0)
+        return;
+    while (deferred_size > 0) {
+        obj_t next = deferred[--deferred_size];
+        free_depth++;
+        obj_free_now(&next, a);
+        free_depth--;
+    }
+}
+
+static void obj_free_now(obj_t* o, const sv_allocator_t* a)
 {
     switch (o->kind) {
         case OBJ_ACTOR: actor_free(&o->actor, a); break;
@@ -289,7 +323,23 @@ const char* value_type_name(value_t v)
     return value_kind_str(VALUE_KIND(v), VALUE_KIND(v) == VALUE_OBJ ? AS_OBJ(v).cell->value.kind : 0);
 }
 
+#define WRITE_DEPTH_MAX 256
+
+static int write_depth;
+
+static bool value_write_now(value_t v, sv_str_builder* b, const vm_ctx_t* ctx);
+
 bool value_write(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
+{
+    if (write_depth >= WRITE_DEPTH_MAX)
+        return sv_strb_add(b, "...", 3, ctx->alloc) >= 0;
+    write_depth++;
+    bool ok = value_write_now(v, b, ctx);
+    write_depth--;
+    return ok;
+}
+
+static bool value_write_now(value_t v, sv_str_builder* b, const vm_ctx_t* ctx)
 {
     const sv_allocator_t* a = ctx->alloc;
 #define CHECK(expr) if (!(expr)) return false

@@ -18,8 +18,13 @@ static void bucket_free(bucket_t* b, const sv_allocator_t* a)
 static void node_free(node_t* n, const sv_allocator_t* a)
 {
     sv_rc_deinit(&n->bucket, a);
-    if (n->tail.cell->value.len > 0)
-        sv_rc_deinit(&n->tail, a);
+    list_t tail = n->tail;
+    while (tail.cell->value.len > 0 && --tail.cell->count == 0) {
+        list_t next = tail.cell->value.tail;
+        sv_rc_deinit(&tail.cell->value.bucket, a);
+        sv_free(a, tail.cell);
+        tail = next;
+    }
 }
 
 
@@ -120,11 +125,12 @@ void ll_deinit(list_t* l, const sv_allocator_t* a)
 
 static sv_opt_t(value_t) node_get(list_t l, int64_t n)
 {
-    node_t node = l.cell->value;
-    if (n >= node.len || n < 0)
-        return node.len != 0 ? node_get(node.tail, n - node.len) : sv_opt_none_t(value_t);
-
-    return sv_opt_some_t(value_t, node.bucket.cell->value.arr[node.start + node.len - 1 - n]);
+    for (node_t node = l.cell->value; node.len != 0; node = node.tail.cell->value) {
+        if (n < node.len)
+            return sv_opt_some_t(value_t, node.bucket.cell->value.arr[node.start + node.len - 1 - n]);
+        n -= node.len;
+    }
+    return sv_opt_none_t(value_t);
 }
 
 sv_opt_t(value_t) ll_get(list_t l, int64_t n)
@@ -265,9 +271,20 @@ list_t ll_add(list_t left, list_t right, const sv_allocator_t* a)
     if (right.cell->value.len == 0)
         return sv_rc_borrow(left);
 
-    list_t new_tail = ll_add(node.tail, right, a);
-    TRY_NOT_NULL(new_tail.cell);
-    return init_from_bucket(node.bucket, node.start, node.len, new_tail, a);
+    list_t head = ERR_LIST;
+    list_t* link = &head;
+    for (list_t l = left; l.cell->value.len > 0; l = l.cell->value.tail) {
+        node = l.cell->value;
+        list_t copy = init_from_bucket(node.bucket, node.start, node.len, ll_empty(), a);
+        if (copy.cell == NULL) {
+            ll_deinit(&head, a);
+            return ERR_LIST;
+        }
+        *link = copy;
+        link = &copy.cell->value.tail;
+    }
+    *link = sv_rc_borrow(right);
+    return head;
 }
 
 static list_t node_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
@@ -389,14 +406,6 @@ list_t ll_delete_at(list_t list, int64_t i, const sv_allocator_t* a)
 
 #undef SET_HEAD
 
-static int64_t ll_count_rec(list_t l, int64_t acc)
-{
-    node_t node = l.cell->value;
-    if (node.len == 0)
-        return acc;
-    return ll_count_rec(node.tail, acc + node.len);
-}
-
 list_t ll_tail(list_t list, const sv_allocator_t* a)
 {
     node_t node = list.cell->value;
@@ -412,7 +421,10 @@ bool ll_is_empty(list_t list)
 
 int64_t ll_count(list_t l)
 {
-    return ll_count_rec(l, 0);
+    int64_t count = 0;
+    for (; l.cell->value.len > 0; l = l.cell->value.tail)
+        count += l.cell->value.len;
+    return count;
 }
 
 ll_iter_t ll_iter_init_no_borrow(list_t l)

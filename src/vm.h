@@ -45,6 +45,7 @@ sv_vec_def(call_frame_t);
 typedef struct vm_t {
     sv_vec_t(call_frame_t) call_frames;
     int64_t max_call_frames;
+    int64_t native_depth;
 
     globals_t globals_names_to_index;
 

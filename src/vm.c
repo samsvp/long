@@ -100,6 +100,8 @@ const char* vm_field_name(const vm_ctx_t* ctx, uint32_t id)
 
 static sv_opt_t(error_t) vm_run_frame(vm_t* vm);
 
+#define MAX_NATIVE_DEPTH 200
+
 #define TRACE_MAX_FRAMES 16
 
 static void trace_add(error_t* err, const char* line, const sv_allocator_t* a)
@@ -205,6 +207,8 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
         return value_init_err(ERROR("Wrong number of arguments", VM_ERR_BAD_ARITY), a);
     if (vm->call_frames.size >= vm->max_call_frames)
         return value_init_err(ERROR("Call stack overflow", VM_ERR_STACK_OVERFLOW), a);
+    if (vm->native_depth >= MAX_NATIVE_DEPTH)
+        return value_init_err(ERROR("Native calls nested too deeply", VM_ERR_STACK_OVERFLOW), a);
 
     const int64_t locals_offset = vm->locals.size;
     const int64_t stack_offset = vm->stack.size;
@@ -218,8 +222,10 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
 
     sv_vec_push(&vm->call_frames, init_frame(fn, locals_offset, stack_offset, upvalues, group),
                 &success, a);
+    vm->native_depth++;
     sv_opt_t(error_t) ret = success ? vm_run_frame(vm)
         : sv_opt_some_t(error_t, error_oom(VM_ERR_OOM));
+    vm->native_depth--;
 
     value_t res = ret.is_some ? value_init_err(ret.value, a) : sv_vec_pop(vm->stack);
     arr_remove_n(&vm->stack, vm->stack.size - stack_offset, a);
@@ -919,7 +925,9 @@ DISPATCH(); }
         ERR_WRONG_ARITY(sv_str_init(fn.name), fn.arity);                                                      \
     frame->ip = ip - code;                                                                                    \
     vm->stack = stack;                                                                                        \
-    value_t ret = fn.fn(args, arg_count, vm);                                                                 \
+    value_t native_args[UINT8_MAX];                                                                           \
+    memcpy(native_args, args, arg_count * sizeof(value_t));                                                   \
+    value_t ret = fn.fn(native_args, arg_count, vm);                                                          \
     stack = vm->stack;                                                                                        \
     frame = &sv_vec_last(vm->call_frames);                                                                    \
     TRY_OR(VALUE_KIND(ret) != VALUE_OBJ || AS_OBJ(ret).cell != NULL, value_free(&value, a));                  \
