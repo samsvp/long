@@ -353,9 +353,9 @@ value_t ntvl_take(const value_t* args, uint8_t n, vm_t* vm)
     assert(n == 2);
 
     CHECK_LIST(args[0]);
-    CHECK_NUMBER(args[1]);
+    CHECK_INDEX(args[1]);
 
-    return wrap_list(ll_slice(AS_LIST(args[0]), 0, AS_NUMBER(args[1]), vm->ctx.alloc), vm);
+    return wrap_list(ll_slice(AS_LIST(args[0]), 0, AS_INDEX(args[1]), vm->ctx.alloc), vm);
 }
 
 value_t ntvl_skip(const value_t* args, uint8_t n, vm_t* vm)
@@ -363,10 +363,10 @@ value_t ntvl_skip(const value_t* args, uint8_t n, vm_t* vm)
     assert(n == 2);
 
     CHECK_LIST(args[0]);
-    CHECK_NUMBER(args[1]);
+    CHECK_INDEX(args[1]);
 
     list_t l = AS_LIST(args[0]);
-    return wrap_list(ll_slice(l, AS_NUMBER(args[1]), ll_count(l), vm->ctx.alloc), vm);
+    return wrap_list(ll_slice(l, AS_INDEX(args[1]), ll_count(l), vm->ctx.alloc), vm);
 }
 
 value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
@@ -405,7 +405,8 @@ value_t ntvl_combinations(const value_t* args, uint8_t n, vm_t* vm)
     }
 
     int64_t total = 1;
-    for (int64_t i = 0; i < k_size; i++) {
+    int64_t k_min = k_size < count - k_size ? k_size : count - k_size;
+    for (int64_t i = 0; i < k_min; i++) {
         if (total > (int64_t)(SIZE_MAX / sizeof(value_t) / count))
             return VALUE_OOM;
         total = total * (count - i) / (i + 1);
@@ -516,8 +517,12 @@ static value_t sort(value_t value, const value_t* f, vm_t* vm)
     ll_iter_t iter = ll_iter_init_no_borrow(l);
     sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
-        value_t x = value_borrow(maybe_x.value);
-        vs.arr[count - ++vs.size] = x;
+        value_t x = maybe_x.value;
+        if (f == NULL && (!IS_NUMBER(x) || isnan(AS_NUMBER(x)))) {
+            sv_vec_deinit(&vs, vm->ctx.alloc);
+            return bad_arg_type_error(x, VALUE_NUMBER, OBJ_STR, vm);
+        }
+        vs.arr[count - ++vs.size] = value_borrow(x);
     }
 
     sort_ctx_t ctx = {
@@ -587,10 +592,14 @@ static value_t min_max(const value_t* args, uint8_t n, bool is_max, vm_t* vm)
     CHECK_LIST(args[0]);
     const value_t* f = n == 2 ? &args[1] : NULL;
 
-    ll_iter_t iter = ll_iter_init_no_borrow(AS_LIST(args[0]));
+    list_t list = AS_LIST(args[0]);
+    if (ll_is_empty(list))
+        return value_nil;
+
+    ll_iter_t iter = ll_iter_init_no_borrow(list);
     sv_opt_t(value_t) maybe_x = sv_opt_none_t(value_t);
-    value_t best = value_nil;
-    double best_key = -INFINITY;
+    double best_key = is_max ? -INFINITY : INFINITY;
+    value_t best = ll_get(list, 0).value;
     while (maybe_x = ll_iter_next(&iter), maybe_x.is_some) {
         value_t x = maybe_x.value;
         value_t key = f == NULL ? x : vm_call_value(vm, *f, &x, 1);

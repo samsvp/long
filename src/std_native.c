@@ -7,6 +7,7 @@
 #include "obj/list.h"
 #include "obj/str.h"
 #include "vm.h"
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <assert.h>
@@ -234,9 +235,9 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
     value_t min = args[0];                                                     \
     value_t max = args[1];                                                     \
     if (!IS_NUMBER(min))                                                       \
-        return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, vm);      \
+        return bad_arg_type_error(min, VALUE_NUMBER, OBJ_LIST, vm);            \
     if (!IS_NUMBER(max))                                                       \
-        return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, vm);      \
+        return bad_arg_type_error(max, VALUE_NUMBER, OBJ_LIST, vm);            \
     if (AS_NUMBER(min) > AS_NUMBER(max))                                       \
         return value_nil;                                                      \
     double range = fabs(AS_NUMBER(max) - AS_NUMBER(min));                      \
@@ -247,9 +248,10 @@ value_t ntv_len(const value_t* args, uint8_t n, vm_t* vm)
 value_t ntv_randi(const value_t* args, uint8_t n, vm_t* vm)
 {
     if (n == 2 && IS_NUMBER(args[0]) && IS_NUMBER(args[1])
-        && !(fabs(AS_NUMBER(args[1]) - AS_NUMBER(args[0])) >= 1))
+        && !(fabs(AS_NUMBER(args[1]) - AS_NUMBER(args[0])) < INT_MAX)
+    )
         return value_nil;
-    RAND(rand() % (int)range + (int)AS_NUMBER(min));
+    RAND(rand() % ((int)range + 1) + (int)AS_NUMBER(min));
 }
 
 value_t ntv_randf(const value_t* args, uint8_t n, vm_t* vm)

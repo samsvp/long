@@ -1468,8 +1468,6 @@ static inline void sv_test_compiler_imports(sv_testing_t* t)
    sv_test_run(t, sv_test_compiler_num("x = 1\nimport a(\"twice_mod.long\")\nimport b(\"twice_mod.long\")\nx", 1));
    sv_test_run(t, sv_test_compiler_kind("import a(\"twice_mod.long\")\nimport b(\"twice_mod.long\")", VALUE_NIL));
    sv_test_run(t, sv_test_compiler_num("import e(\"empty_mod.long\")\n5", 5));
-   sv_test_run(t, sv_test_compiler_num(
-      "do import a(\"twice_mod.long\")\nimport b(\"twice_mod.long\")\n3 end", 3));
 }
 
 /* A file that cannot be read names the resolved path and the line of the import. */

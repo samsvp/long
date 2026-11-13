@@ -20,6 +20,7 @@ sv_opt_t(uint32_t) globals_get(const globals_t g, sv_str_t id, sv_str_t prefix, 
                                const sv_allocator_t*);
 
 sv_opt_t(uint32_t) names_get(transient_hashmap_t names, sv_str_t id, const sv_allocator_t*);
+sv_opt_t(uint32_t) get_prefixed(const globals_t g, sv_str_t id, sv_str_t prefix, const sv_allocator_t* a);
 
 void check_limit(ctx_t* ctx, int64_t n, uint32_t max, const char* what, int64_t line);
 

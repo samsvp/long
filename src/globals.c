@@ -129,7 +129,7 @@ uint32_t globals_add(globals_t* g, sv_str_t id, sv_str_t prefix, int64_t line, c
     return index;
 }
 
-static sv_opt_t(uint32_t) get_prefixed(const globals_t g, sv_str_t id, sv_str_t prefix, const sv_allocator_t* a)
+sv_opt_t(uint32_t) get_prefixed(const globals_t g, sv_str_t id, sv_str_t prefix, const sv_allocator_t* a)
 {
     sv_str_t name = append_prefix(id, prefix, a);
     if (name.chars == NULL)

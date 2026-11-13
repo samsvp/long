@@ -371,11 +371,11 @@ static void compile_id(compiler_t* c, sv_str_t id, int64_t line, ctx_t* ctx)
         emit_wide(c, ctx, OP_GET_LOCAL, idx.value, line);
     else if ((idx = locals_get(&c->upvalues, id, c->scratch)).is_some)
         emit_wide(c, ctx, OP_GET_UPVALUE, idx.value, line);
+    else if ((idx = names_get(c->members, id, c->scratch)).is_some)
+        emit_narrow(c, ctx, OP_GET_MEMBER, idx.value, "closure group members", line);
     else if ((idx = globals_get(c->globals, id, sv_str_init(c->current_path), c->outer_path,
                                 c->scratch)).is_some)
         emit_wide(c, ctx, OP_GET_GLOBAL, idx.value, line);
-    else if ((idx = names_get(c->members, id, c->scratch)).is_some)
-        emit_narrow(c, ctx, OP_GET_MEMBER, idx.value, "closure group members", line);
     else
         compiler_error_name(ctx, C_ERR_UNDEFINED_VARIABLE, line, "Undefined variable", id);
 }
@@ -805,7 +805,7 @@ static void compile_double_colon(compiler_t* c, const sexpr_t* args, int64_t n, 
 
     sv_str_t path = module_path(c, args[0], line, ctx);
     sv_str_t var_name = expect_id(args[1], ctx);
-    sv_opt_t(uint32_t) id = globals_get(c->globals, var_name, path, NULL, c->scratch);
+    sv_opt_t(uint32_t) id = get_prefixed(c->globals, var_name, path, c->scratch);
     if (!id.is_some)
         compiler_error_name(ctx, C_ERR_UNDEFINED_VARIABLE, line, "Undefined variable", var_name);
 
@@ -1271,9 +1271,7 @@ static void compile_fun_group(compiler_t* c, const sexpr_t* members, int64_t n, 
 static sv_opt_t(uint32_t) actor_fn(compiler_t* c, const char* fn, const char* path)
 {
     sv_str_t id = sv_str_init(fn);
-    sv_opt_t(uint32_t) own = globals_get(c->globals, id, sv_str_init(path), NULL, c->scratch);
-    sv_opt_t(uint32_t) bare = names_get(c->globals.name_indexes, id, c->scratch);
-    return own.is_some && (!bare.is_some || bare.value != own.value) ? own : sv_opt_none_t(uint32_t);
+    return get_prefixed(c->globals, id, sv_str_init(path), c->scratch);
 }
 
 static void check_actor_fn(const sexpr_t* fun, int64_t line, ctx_t* ctx)
@@ -1640,6 +1638,9 @@ static void add_native_mod(compiler_t* c, native_module_t mod, ctx_t* ctx)
 /* Compiles the module unless it already is, and binds its alias. Returns whether it was compiled now. */
 static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx_t* ctx)
 {
+    if (c->locals != NULL)
+        compiler_error(ctx, C_ERR_UNEXPECTED_SEXPR, line, "Imports are only allowed at the top level");
+
     sv_str_t name = expect_id(args[0], ctx);
 
     // get import file name
@@ -1719,7 +1720,7 @@ static void compile_cons(compiler_t* c, const sexpr_t* cons, int64_t n, bool is_
     if (head.tag == S_CONS) {
         for (int64_t i = 1; i < n; i++)
             compile_sexpr(c, cons[i], false, ctx);
-        compile_cons(c, head.cons.arr, head.cons.size, false, ctx);
+        compile_sexpr(c, head, false, ctx);
         uint8_t op = is_tail ? OP_TAIL_CALL : OP_CALL;
         emit_narrow(c, ctx, op, n - 1, "arguments", sexpr_line(head));
         return;

@@ -116,6 +116,39 @@ static bool pattern_is_collection(pattern_class pat_class)
     return pat_class == PAT_LIST || pat_class == PAT_TUPLE || pat_class == PAT_HASHMAP || pat_class == PAT_RECORD;
 }
 
+static bool is_dot_dot(sexpr_t s)
+{
+    return s.tag == S_ATOM && s.atom.kind == TOKEN_DOT_DOT;
+}
+
+static bool is_tail(sexpr_t s)
+{
+    return s.tag == S_CONS && is_dot_dot(s.cons.arr[0]);
+}
+
+static bool is_fail(sexpr_t e)
+{
+    return e.tag == S_ATOM
+        && e.atom.kind == TOKEN_LITERAL
+        && e.atom.literal.kind == LITERAL_IDENTIFIER
+        && sv_str_comp(e.atom.literal.literal, sv_str_init(FAIL_NAME));
+}
+
+static bool is_when(sexpr_t e)
+{
+    return e.tag == S_ATOM
+        && e.atom.kind == TOKEN_KEYWORD
+        && e.atom.keyword == KEYWORD_WHEN;
+}
+
+static bool is_wildcard(sexpr_t s)
+{
+    return s.tag == S_ATOM
+        && s.atom.kind == TOKEN_LITERAL
+        && s.atom.literal.kind == LITERAL_IDENTIFIER
+        && sv_str_comp(s.atom.literal.literal, sv_str_init("_"));
+}
+
 static pattern_class pattern_class_of(sexpr_t pattern)
 {
     if (pattern.tag == S_CONS) {
@@ -204,8 +237,11 @@ static int group_cmp(void* ctx, const void* a, const void* b) {
         case LITERAL_TRUE:
         case LITERAL_NIL:
             return 0;
-        case LITERAL_NUMBER:
-            return AS_LITERAL(sa).number - AS_LITERAL(sb).number;
+        case LITERAL_NUMBER: {
+            double x = AS_LITERAL(sa).number;
+            double y = AS_LITERAL(sb).number;
+            return (x > y) - (x < y);
+        }
         case LITERAL_STRING:
         case LITERAL_ATOM: {
             sv_str_t str_a = AS_LITERAL(sa).str;
@@ -222,6 +258,10 @@ static int group_cmp(void* ctx, const void* a, const void* b) {
         return sa.cons.size == 1 || sb.cons.size == 1 ?
             sa.cons.size - sb.cons.size : 0;
     }
+
+    if (AS_FN(sa) == FN_RECORD || AS_FN(sa) == FN_HASHMAP)
+        return 0;
+
     return sa.cons.size - sb.cons.size;
 }
 
@@ -253,38 +293,6 @@ static bool constructor_eql(sexpr_t a, sexpr_t b)
     return false;
 }
 
-static bool is_dot_dot(sexpr_t s)
-{
-    return s.tag == S_ATOM && s.atom.kind == TOKEN_DOT_DOT;
-}
-
-static bool is_tail(sexpr_t s)
-{
-    return s.tag == S_CONS && is_dot_dot(s.cons.arr[0]);
-}
-
-static bool is_fail(sexpr_t e)
-{
-    return e.tag == S_ATOM
-        && e.atom.kind == TOKEN_LITERAL
-        && e.atom.literal.kind == LITERAL_IDENTIFIER
-        && sv_str_comp(e.atom.literal.literal, sv_str_init(FAIL_NAME));
-}
-
-static bool is_when(sexpr_t e)
-{
-    return e.tag == S_ATOM
-        && e.atom.kind == TOKEN_KEYWORD
-        && e.atom.keyword == KEYWORD_WHEN;
-}
-
-static bool is_wildcard(sexpr_t s)
-{
-    return s.tag == S_ATOM
-        && s.atom.kind == TOKEN_LITERAL
-        && s.atom.literal.kind == LITERAL_IDENTIFIER
-        && sv_str_comp(s.atom.literal.literal, sv_str_init("_"));
-}
 
 /**
   * Closes a `(| tried otherwise)` built in place. A bar with a fail on either side cannot
