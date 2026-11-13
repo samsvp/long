@@ -27,18 +27,6 @@ void record_deinit(record_t* t, const sv_allocator_t* a)
     sv_free(a, t->items);
 }
 
-bool record_eql(record_t t1, record_t t2)
-{
-    if (t1.size != t2.size)
-        return false;
-
-    for (uint8_t i = 0; i < t1.size; i++)
-        if (t1.items[i].id != t2.items[i].id || !value_eql(t1.items[i].value, t2.items[i].value))
-            return false;
-
-    return true;
-}
-
 sv_opt_t(value_t) record_get(record_t tuple, uint32_t target)
 {
     if (tuple.size == 0)

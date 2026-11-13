@@ -1,6 +1,7 @@
 #include "modules/list.h"
 #include "modules/math.h"
 #include "modules/actor.h"
+#include <limits.h>
 #define SV_ARENA_IMPLEMENTATION
 #include "std/arena.h"
 #include <assert.h>
@@ -167,8 +168,8 @@ static char* read_file(ctx_t* ctx, const char* path, int64_t line, const sv_allo
 
     fseek(file, 0L, SEEK_END);
     long size = ftell(file);
-    if (size < 0) {
-        int err = errno;
+    if (size < 0 || size == LONG_MAX) {
+        int err = size < 0 ? errno : EISDIR;
         fclose(file);
         compiler_file_error(ctx, path, line, err);
     }
@@ -957,8 +958,10 @@ static void compile_if(compiler_t* c, const sexpr_t* args, int64_t n, int64_t li
     if (destructure)                                                                                          \
         deinit_scope(c, ctx);                                                                                 \
     emit_pop_locals(c, ctx, names_count(c->locals->name_indexes), 0);                                         \
+    if (c->builder.fn.chunk.bytecode.size + 1 - loop_start > UINT16_MAX)                                      \
+        compiler_error(ctx, C_ERR_JUMP_TOO_LONG, line, "Jump too long");                                      \
     if (!fnb_add_jump_back(&c->builder, loop_start, line, &ctx->alloc))                                       \
-        compiler_oom(ctx);                                                                              \
+        compiler_oom(ctx);                                                                                    \
     patch_jump(c, ctx, j1, line)
 
 static void compile_for(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)
@@ -1052,20 +1055,31 @@ static void compile_and_or(compiler_t* c, bool is_and, const sexpr_t* args, int6
     compile_sexpr(c, args[0], false, ctx);
     emit(c, ctx, OP_DUP, line);
 
-    int64_t j1 = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc));
+    // `skip` leaves the left value as the result without running the right side
+    int64_t skip = jump_emit(ctx, fnb_add_jump_if_false(&c->builder, line, &ctx->alloc));
+    if (!is_and) {
+        int64_t run = skip;
+        skip = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
+        patch_jump(c, ctx, run, line);
+    }
 
-    if (is_and) {
-        emit(c, ctx, OP_POP, line);
-        compile_sexpr(c, args[1], false, ctx);
-        patch_jump(c, ctx, j1, line);
+    emit(c, ctx, OP_POP, line);
+    int64_t before = c->locals != NULL ? names_count(c->locals->name_indexes) : names_count(c->globals.name_indexes);
+    compile_sexpr(c, args[1], false, ctx);
+    int64_t after = c->locals != NULL ? names_count(c->locals->name_indexes) : names_count(c->globals.name_indexes);
+    if (after == before) {
+        patch_jump(c, ctx, skip, line);
         return;
     }
 
-    int64_t j2 = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
-    patch_jump(c, ctx, j1, line);
-    emit(c, ctx, OP_POP, line);
-    compile_sexpr(c, args[1], false, ctx);
-    patch_jump(c, ctx, j2, line);
+    // names bound on the right are set to nil when it is skipped, so later slots line up
+    int64_t done = jump_emit(ctx, fnb_add_jump(&c->builder, line, &ctx->alloc));
+    patch_jump(c, ctx, skip, line);
+    for (int64_t i = before; i < after; i++) {
+        add_const(c, ctx, value_nil);
+        emit(c, ctx, c->locals != NULL ? OP_SET_LOCAL : OP_SET_GLOBAL, line);
+    }
+    patch_jump(c, ctx, done, line);
 }
 
 static void compile_not(compiler_t* c, const sexpr_t* args, int64_t n, int64_t line, ctx_t* ctx)

@@ -289,19 +289,41 @@ list_t ll_add(list_t left, list_t right, const sv_allocator_t* a)
 
 static list_t node_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
 {
-    node_t node = list.cell->value;
-    if (node.len == 0 || to < 0 || to <= from)
-        return ll_empty();
+    list_t head = ERR_LIST;
+    list_t* link = &head;
+    for (;;) {
+        node_t node = list.cell->value;
+        if (node.len == 0 || to < 0 || to <= from)
+            return head.cell != NULL ? head : ll_empty();
 
-    if (from >= node.len)
-        return node_slice(list.cell->value.tail, from - node.len, to - node.len, a);
+        if (from >= node.len) {
+            from -= node.len;
+            to -= node.len;
+            list = node.tail;
+            continue;
+        }
 
-    if (to <= node.len)
-        return init_from_bucket(node.bucket, node.start + node.len - to, to - from, ll_empty(), a);
+        if (to <= node.len) {
+            list_t last = init_from_bucket(node.bucket, node.start + node.len - to, to - from, ll_empty(), a);
+            if (last.cell == NULL)
+                goto error;
+            *link = last;
+            return head;
+        }
 
-    list_t tail = node_slice(node.tail, 0, to - node.len, a);
-    TRY_NOT_NULL(tail.cell);
-    return init_from_bucket(node.bucket, node.start, node.len - from, tail, a);
+        list_t part = init_from_bucket(node.bucket, node.start, node.len - from, ll_empty(), a);
+        if (part.cell == NULL)
+            goto error;
+        *link = part;
+        link = &part.cell->value.tail;
+        to -= node.len;
+        from = 0;
+        list = node.tail;
+    }
+
+error:
+    ll_deinit(&head, a);
+    return ERR_LIST;
 }
 
 list_t ll_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
@@ -315,22 +337,50 @@ list_t ll_slice(list_t list, int64_t from, int64_t to, const sv_allocator_t* a)
 }
 
 #define SET_HEAD(...) do { head = __VA_ARGS__; if (head.cell == NULL) goto error; } while (0)
-#define RETURN_RECURSIVE(function) do {\
-    if (node.tail.cell->value.len == 0) return ERR_LIST; \
-    list_t new_tail = function(node.tail, v, i - node.len, a); \
-    TRY_NOT_NULL(new_tail.cell); \
-    return init_from_bucket(node.bucket, node.start, node.len, new_tail, a); \
-} while (0)
-static list_t ll_insert_impl(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
+
+typedef list_t (*node_op_t)(list_t node, value_t v, int64_t i, const sv_allocator_t* a);
+
+/**
+ * Applies `op` to the node holding index `i`, copying the nodes before it. With `to_end`,
+ * an index equal to a node's length belongs to that node.
+ */
+static list_t apply_at(list_t list, value_t v, int64_t i, bool to_end, node_op_t op,
+                       const sv_allocator_t* a)
 {
-    TRY_POSITIVE(i);
+    list_t head = ERR_LIST;
+    list_t* link = &head;
+    for (;;) {
+        node_t node = list.cell->value;
+        if (i < node.len || (to_end && i == node.len))
+            break;
+        if (node.tail.cell->value.len == 0)
+            goto error;
+        list_t copy = init_from_bucket(node.bucket, node.start, node.len, ll_empty(), a);
+        if (copy.cell == NULL)
+            goto error;
+        *link = copy;
+        link = &copy.cell->value.tail;
+        i -= node.len;
+        list = node.tail;
+    }
+
+    list_t rest = op(list, v, i, a);
+    if (rest.cell == NULL)
+        goto error;
+    *link = rest;
+    return head;
+
+error:
+    ll_deinit(&head, a);
+    return ERR_LIST;
+}
+
+static list_t insert_in_node(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
+{
     if (i == 0)
         return ll_prepend(list, v, a);
 
     node_t node = list.cell->value;
-    if (i > node.len)
-        RETURN_RECURSIVE(ll_insert_impl);
-
     list_t head = sv_rc_borrow(node.tail);
 
     if (i < node.len)
@@ -348,18 +398,13 @@ list_t ll_insert(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
 {
     if (i < 0)
         i += ll_count(list) + 1;
-    return ll_insert_impl(list, v, i, a);
+    TRY_POSITIVE(i);
+    return apply_at(list, v, i, true, insert_in_node, a);
 }
 
-list_t ll_update(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
+static list_t update_in_node(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
 {
-    TRY_POSITIVE(i);
-
     node_t node = list.cell->value;
-
-    if (i >= node.len)
-        RETURN_RECURSIVE(ll_update);
-
     list_t head = sv_rc_borrow(node.tail);
 
     if (i < node.len - 1)
@@ -374,17 +419,19 @@ error:
     return ERR_LIST;
 }
 
-static list_t ll_delete_at_impl(list_t list, void* v, int64_t i, const sv_allocator_t* a)
+list_t ll_update(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
 {
     TRY_POSITIVE(i);
+    return apply_at(list, v, i, false, update_in_node, a);
+}
+
+static list_t delete_in_node(list_t list, value_t v, int64_t i, const sv_allocator_t* a)
+{
+    (void)v;
+    if (i == 0)
+        return ll_tail(list, a);
 
     node_t node = list.cell->value;
-    if (i == 0)
-        return node.len > 0 ? ll_tail(list, a) : ERR_LIST;
-
-    if (i >= node.len)
-        RETURN_RECURSIVE(ll_delete_at_impl);
-
     list_t head = sv_rc_borrow(node.tail);
 
     if (i < node.len - 1)
@@ -401,7 +448,8 @@ list_t ll_delete_at(list_t list, int64_t i, const sv_allocator_t* a)
 {
     if (i < 0)
         i += ll_count(list);
-    return ll_delete_at_impl(list, NULL, i, a);
+    TRY_POSITIVE(i);
+    return apply_at(list, value_nil, i, false, delete_in_node, a);
 }
 
 #undef SET_HEAD

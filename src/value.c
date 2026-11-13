@@ -17,36 +17,32 @@ void value_arr_deinit(sv_vec_t(value_t)* arr, const sv_allocator_t* a)
     sv_vec_deinit(arr, a);
 }
 
-static bool list_eql(list_t x, list_t y)
-{
-    if (ll_count(x) != ll_count(y))
-        return false;
-    ll_iter_t ix = ll_iter_init_no_borrow(x);
-    ll_iter_t iy = ll_iter_init_no_borrow(y);
-    for (;;) {
-        sv_opt_t(value_t) ex = ll_iter_next(&ix);
-        sv_opt_t(value_t) ey = ll_iter_next(&iy);
-        if (!ex.is_some)
-            return true;
-        if (!value_eql(ex.value, ey.value))
-            return false;
-    }
-}
+#define EQL_MAX 1024
 
-static bool map_eql(hashmap_t x, hashmap_t y)
+static value_t eql_x[EQL_MAX];
+static value_t eql_y[EQL_MAX];
+static int eql_size;
+
+/**
+ * Queues two children for comparison. Scalars are compared right away, and so are objects
+ * when the queue is full.
+ */
+static bool push_eql(value_t x, value_t y)
 {
-    if (map_count(x) != map_count(y))
-        return false;
-    map_iter_t it = map_iter_init_no_borrow(x);
-    for (sv_opt_t(kv_t) kv = map_iter_next(&it); kv.is_some; kv = map_iter_next(&it)) {
-        sv_opt_t(value_t) other = map_get(y, kv.value.key);
-        if (!other.is_some || !value_eql(kv.value.value, other.value))
-            return false;
-    }
+    if (!IS_OBJ(x) || !IS_OBJ(y))
+        return value_eql(x, y);
+    if (eql_size == EQL_MAX)
+        return value_obj_eql(x, y);
+    eql_x[eql_size] = x;
+    eql_y[eql_size] = y;
+    eql_size++;
     return true;
 }
 
-bool value_obj_eql(value_t x, value_t y)
+/**
+ * Compares two objects without descending into them, queueing their children instead.
+ */
+static bool eql_shallow(value_t x, value_t y)
 {
     if (AS_OBJ(x).cell == AS_OBJ(y).cell)
         return true;
@@ -54,12 +50,47 @@ bool value_obj_eql(value_t x, value_t y)
     const obj_t* oy = &AS_OBJ(y).cell->value;
     if (ox->kind != oy->kind)
         return false;
+
     switch (ox->kind) {
         case OBJ_STR: return sv_str_comp(ox->str, oy->str);
-        case OBJ_LIST: return list_eql(ox->list, oy->list);
-        case OBJ_MAP: return map_eql(ox->map, oy->map);
-        case OBJ_RECORD: return record_eql(ox->record, oy->record);
-        case OBJ_TUPLE: return tuple_eql(ox->tuple, oy->tuple);
+        case OBJ_TUPLE: {
+            if (ox->tuple.size != oy->tuple.size)
+                return false;
+            for (uint8_t i = 0; i < ox->tuple.size; i++)
+                if (!push_eql(ox->tuple.items[i], oy->tuple.items[i]))
+                    return false;
+            return true;
+        }
+        case OBJ_RECORD: {
+            if (ox->record.size != oy->record.size)
+                return false;
+            for (uint8_t i = 0; i < ox->record.size; i++)
+                if (ox->record.items[i].id != oy->record.items[i].id
+                    || !push_eql(ox->record.items[i].value, oy->record.items[i].value))
+                    return false;
+            return true;
+        }
+        case OBJ_LIST: {
+            if (ll_count(ox->list) != ll_count(oy->list))
+                return false;
+            ll_iter_t ix = ll_iter_init_no_borrow(ox->list);
+            ll_iter_t iy = ll_iter_init_no_borrow(oy->list);
+            for (sv_opt_t(value_t) ex = ll_iter_next(&ix); ex.is_some; ex = ll_iter_next(&ix))
+                if (!push_eql(ex.value, ll_iter_next(&iy).value))
+                    return false;
+            return true;
+        }
+        case OBJ_MAP: {
+            if (map_count(ox->map) != map_count(oy->map))
+                return false;
+            map_iter_t it = map_iter_init_no_borrow(ox->map);
+            for (sv_opt_t(kv_t) kv = map_iter_next(&it); kv.is_some; kv = map_iter_next(&it)) {
+                sv_opt_t(value_t) other = map_get(oy->map, kv.value.key);
+                if (!other.is_some || !push_eql(kv.value.value, other.value))
+                    return false;
+            }
+            return true;
+        }
         case OBJ_USER_VALUE: return uv_eql(ox->uservalue, oy->uservalue);
         case OBJ_NATIVE_FN:
         case OBJ_ITER:
@@ -70,6 +101,18 @@ bool value_obj_eql(value_t x, value_t y)
             return ox == oy;
     }
     return false;
+}
+
+bool value_obj_eql(value_t x, value_t y)
+{
+    int base = eql_size;
+    bool eql = eql_shallow(x, y);
+    while (eql && eql_size > base) {
+        eql_size--;
+        eql = eql_shallow(eql_x[eql_size], eql_y[eql_size]);
+    }
+    eql_size = base;
+    return eql;
 }
 
 #define FREE_DEPTH_MAX 256

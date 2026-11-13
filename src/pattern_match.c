@@ -414,8 +414,9 @@ static sexpr_t bind_var(cons_t* cons, sexpr_t lhs, sexpr_t rhs)
 /**
  * Creates a new `u` var from the book `the implementation of functional programming languages`.
  */
-static sexpr_t next_u(void)
+static sexpr_t next_u(int64_t line, ctx_t* ctx)
 {
+    check_limit(ctx, temps_used + 1, TEMPS_MAX, "temporaries in a match", line);
     char* buf = temp_names[temps_used];
     //snprintf(buf, TEMP_SIZE, "$%0*d", TEMP_DIGITS, ++temps_used);
     snprintf(buf, TEMP_SIZE, "$%d", ++temps_used);
@@ -612,7 +613,7 @@ static sexpr_t compile_tuple_init(cons_t match, int* start_i, sexpr_t u, cons_t*
         // ...)
         cons_t us = init_tuple(size, a);
         for (int64_t i = 0; i < size; i++) {
-            sexpr_t u_i = next_u();
+            sexpr_t u_i = next_u(match.arr[0].atom.line, ctx);
             APPEND_CAP(&us, u_i);
 
             cons_t tuple_get = cons_init(3, a);
@@ -705,9 +706,9 @@ static sexpr_t compile_list(cons_t match, int* start_i, sexpr_t u, ctx_t* ctx, c
     // if body
     cons_t list_uncons_expr = cons_init(4, a);
     // head
-    sexpr_t u_2 = next_u();
+    sexpr_t u_2 = next_u(match.arr[0].atom.line, ctx);
     // tail
-    sexpr_t u_3 = next_u();
+    sexpr_t u_3 = next_u(match.arr[0].atom.line, ctx);
     // (list-uncons u u2 u3)
     APPEND_CAP(&list_uncons_expr, id_atom("list-uncons"));
     // TODO make list-uncons be equal to (u2 = head u; u3 = tail u)
@@ -897,7 +898,7 @@ static sexpr_t compile_kv_container(cons_t match, int* start_i, sexpr_t u, patte
 
             // set as eql
             cons_t u_eql = cons_init(3, a);
-            bind_var(&u_eql, next_u(), cons_sexpr(get_field));
+            bind_var(&u_eql, next_u(match.arr[0].atom.line, ctx), cons_sexpr(get_field));
             APPEND_CAP(&do_block, cons_sexpr(u_eql));
 
             // add value match tuple pattern
@@ -944,7 +945,7 @@ static sexpr_t compile_kv_container(cons_t match, int* start_i, sexpr_t u, patte
 
     // set as eql
     cons_t u_eql = cons_init(3, a);
-    sexpr_t un = next_u();
+    sexpr_t un = next_u(match.arr[0].atom.line, ctx);
     bind_var(&u_eql, un, cons_sexpr(get_size));
     APPEND_CAP(&do_block, cons_sexpr(u_eql));
 
@@ -1185,7 +1186,7 @@ static void linearize(sexpr_t pat, sexpr_t* body, cons_t* list,
         return;
     }
 
-    sexpr_t new_name = next_u();
+    sexpr_t new_name = next_u(pat.atom.line, ctx);
     APPEND_CAP(list, new_name);
     cons_t eqls = cons_init(3, a);
     *body = patch_when(*body, compare_vals(&eqls, pat, new_name), a);
@@ -1276,7 +1277,7 @@ sexpr_t match_compile(sexpr_t s, ctx_t* ctx, const sv_allocator_t* a)
     }
 
     sexpr_t subject = match.arr[1];
-    sexpr_t u = pattern_is_name(subject) ? subject : next_u();
+    sexpr_t u = pattern_is_name(subject) ? subject : next_u(s.cons.arr[0].atom.line, ctx);
 
     for (int i = CONDS_START; i < match.size; i++) {
         sexpr_t body = GET_BODY(match, i);

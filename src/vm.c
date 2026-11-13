@@ -21,7 +21,10 @@ static inline void arr_remove_n(value_arr* arr, int64_t n, const sv_allocator_t*
 
 static bool is_integer(value_t v)
 {
-    return IS_NUMBER(v) && AS_NUMBER(v) == (double)(int64_t)AS_NUMBER(v);
+    if (!IS_NUMBER(v))
+        return false;
+    double d = AS_NUMBER(v);
+    return d >= -0x1p63 && d < 0x1p63 && d == (double)(int64_t)d;
 }
 
 vm_t vm_init(fn_t fn, int64_t max_call_frames, globals_t globals_names_to_index, const sv_allocator_t* a)
@@ -446,7 +449,7 @@ DISPATCH(); }
     #define DISPATCH() break
 #endif
 
-#ifdef LONG_COMPUTED_GOTO
+#if LONG_COMPUTED_GOTO
     DISPATCH();
 #else
     while (1)

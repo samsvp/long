@@ -21,18 +21,6 @@ void tuple_deinit(tuple_t* t, const sv_allocator_t* a)
     sv_free(a, t->items);
 }
 
-bool tuple_eql(tuple_t t1, tuple_t t2)
-{
-    if (t1.size != t2.size)
-        return false;
-
-    for (uint8_t i = 0; i < t1.size; i++)
-        if (!value_eql(t1.items[i], t2.items[i]))
-            return false;
-
-    return true;
-}
-
 sv_opt_t(value_t) tuple_get(tuple_t tuple, int64_t i)
 {
     if (i < 0)

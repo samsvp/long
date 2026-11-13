@@ -25,10 +25,6 @@ record_t record_init(const value_t*, uint8_t, const sv_allocator_t*);
  */
 void record_deinit(record_t*, const sv_allocator_t*);
 /**
- * Checks if two tuples are equal.
- */
-bool record_eql(record_t, record_t);
-/**
  * Returns the element from the tuple.
  */
 sv_opt_t(value_t) record_get(record_t, uint32_t);
