@@ -3,8 +3,9 @@ Generates the raylib module for long from raylib.h.
 
 Usage: python3 scripts/gen_raylib.py /usr/local/include/raylib.h /usr/local/lib/libraylib.a > vendor/raylib/raylib.c
 
-Structs become user values with a constructor named after the struct. Enum values and colors are
-functions without arguments. Functions with pointer parameters or results (other than const char*),
+Functions and struct constructors are named in snake_case (DrawText is draw_text, Vector2 is
+vector2). Structs become user values. Enum values and colors keep their names and are functions
+without arguments. Functions with pointer parameters or results (other than const char*),
 callbacks or varargs are skipped, and so are functions the library does not define.
 """
 
@@ -22,6 +23,13 @@ POINTER_LEN = 18
 
 def norm(t):
     return re.sub(r"\s*\*", "*", t.strip())
+
+
+def snake(name):
+    """GetScreenToWorld2D is get_screen_to_world_2d, Vector2 is vector2 and GetFPS is get_fps."""
+    words = re.findall(r"\d+D(?![a-z])|[A-Z]+(?=[A-Z][a-z]|\d+D(?![a-z])|$)|[A-Z]?[a-z]+(?:\d+(?!D(?![a-z])))?|[A-Z]+\d*|\d+",
+                       name)
+    return "_".join(words).lower()
 
 
 class Field:
@@ -577,11 +585,11 @@ class Gen:
         for s in self.structs.values():
             if any(f.dim is not None for f in s.fields):
                 continue
-            entries.append((f"c_{s.name}", len(s.fields), s.name))
-            for alias, base in self.aliases.items():
+            entries.append((f"c_{s.name}", len(s.fields), snake(s.name)))
+            for alias in self.aliases:
                 if self.base(alias) == s.name:
-                    entries.append((f"c_{s.name}", len(s.fields), alias))
-        entries += [(f"f_{name}", arity, name) for name, arity in kept]
+                    entries.append((f"c_{s.name}", len(s.fields), snake(alias)))
+        entries += [(f"f_{name}", arity, snake(name)) for name, arity in kept]
         entries += [(f"k_{e}", 0, e) for e in self.enums + self.colors]
         names = [e[2] for e in entries]
         assert len(names) == len(set(names)), "duplicate native names"

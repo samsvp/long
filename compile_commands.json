@@ -390,5 +390,49 @@
     "directory": "/home/antedeguemon/git/long",
     "file": "/home/antedeguemon/git/long/tests/main.c",
     "output": "/home/antedeguemon/git/long/build/test/tests_main.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-std=c17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Wswitch-enum",
+      "-pedantic",
+      "-O2",
+      "-fvisibility=hidden",
+      "-fPIC",
+      "-Isrc",
+      "-c",
+      "-o",
+      "build/vendor/raylib.o",
+      "vendor/raylib/raylib.c"
+    ],
+    "directory": "/home/antedeguemon/git/long",
+    "file": "/home/antedeguemon/git/long/vendor/raylib/raylib.c",
+    "output": "/home/antedeguemon/git/long/build/vendor/raylib.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-std=c17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-Wswitch-enum",
+      "-pedantic",
+      "-O2",
+      "-fvisibility=hidden",
+      "-fPIC",
+      "-Isrc",
+      "-c",
+      "-o",
+      "build/vendor/curses.o",
+      "vendor/curses/curses.c"
+    ],
+    "directory": "/home/antedeguemon/git/long",
+    "file": "/home/antedeguemon/git/long/vendor/curses/curses.c",
+    "output": "/home/antedeguemon/git/long/build/vendor/curses.o"
   }
 ]
