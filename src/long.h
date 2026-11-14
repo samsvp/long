@@ -120,6 +120,7 @@ LONG_API bool long_is_actor(value_t);
 LONG_API bool long_is_falsey(value_t);
 LONG_API bool long_is_function(value_t);
 LONG_API bool long_is_user(value_t);
+LONG_API bool long_is_error(value_t);
 
 LONG_API double long_as_number(value_t);
 LONG_API bool long_as_bool(value_t);
@@ -184,5 +185,14 @@ LONG_API void long_free(const sv_allocator_t*, void*);
  * Compiles and runs the file, logging errors to stderr. Returns 0 on success, 1 on failure.
  */
 LONG_API int long_run_file(const char* path);
+
+/**
+ * Calls a callable value on top of the vm.
+ */
+LONG_API value_t long_call_value(vm_t*, value_t, const value_t*, uint8_t);
+/**
+ * Calls the given function by name.
+ */
+LONG_API value_t long_call_name(vm_t*, const value_t*, uint8_t, sv_str_t function_name, sv_str_t file_name);
 
 #endif

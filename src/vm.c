@@ -237,7 +237,7 @@ value_t vm_call_value(vm_t* vm, value_t callee, const value_t* args, uint8_t arg
 }
 #undef ERROR
 
-value_t vm_call_name(vm_t* vm, value_t* args, uint8_t arg_count,
+value_t vm_call_name(vm_t* vm, const value_t* args, uint8_t arg_count,
                      sv_str_t function_name, sv_str_t file_name)
 {
     sv_opt_t(uint32_t) index = globals_get(vm->globals_names_to_index, function_name, file_name, NULL,

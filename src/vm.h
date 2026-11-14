@@ -97,7 +97,7 @@ value_t vm_call_value(vm_t*, value_t, const value_t*, uint8_t);
 /**
  * Calls the given function by name.
  */
-value_t vm_call_name(vm_t*, value_t*, uint8_t, sv_str_t function_name, sv_str_t file_name);
+value_t vm_call_name(vm_t*, const value_t*, uint8_t, sv_str_t function_name, sv_str_t file_name);
 
 typedef enum {
 #define OP_CODE(op) op,

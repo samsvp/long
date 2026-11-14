@@ -16,6 +16,7 @@ bool long_is_actor(value_t v) { return IS_ACTOR(v); }
 bool long_is_falsey(value_t v) { return IS_FALSEY(v); }
 bool long_is_function(value_t v) { return IS_NATIVE(v) || IS_CLOSURE(v) || IS_CLOSURE_MEMBER(v); }
 bool long_is_user(value_t v) { return IS_USER_VALUE(v); }
+bool long_is_error(value_t v) { return IS_ERR(v); }
 
 double long_as_number(value_t v) { return AS_NUMBER(v); }
 bool long_as_bool(value_t v) { return AS_BOOL(v); }
@@ -123,3 +124,9 @@ int long_run_file(const char* path)
     vm_deinit(&vm);
     return 0;
 }
+
+value_t long_call_value(vm_t* vm, value_t f, const value_t* args, uint8_t n)
+{ return vm_call_value(vm, f, args, n); }
+
+value_t long_call_name(vm_t* vm, const value_t* args, uint8_t n, sv_str_t function_name, sv_str_t file_name)
+{ return vm_call_name(vm, args, n, function_name, file_name); }
