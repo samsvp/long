@@ -1905,6 +1905,7 @@ static vm_t compile_guarded(const char** files, int64_t count, compile_opts_t op
         { .arity = 2, .name = "ifilter", .fn = ntvl_ifilter },
         { .arity = 3, .name = "ireduce", .fn = ntvl_ireduce },
         { .arity = 2, .name = "add", .fn = ntvl_add },
+        { .arity = 3, .name = "update", .fn = ntvl_update },
         { .arity = 2, .name = "prepend", .fn = ntvl_prepend },
         { .arity = 2, .name = "remove", .fn = ntvl_remove },
         { .arity = 2, .name = "remove_all", .fn = ntvl_remove_all },

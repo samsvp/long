@@ -163,15 +163,21 @@ value_t ntvl_ireduce(const value_t* args, uint8_t n, vm_t* vm)
     return reduce_list(args[0], args[1], args[2], true, vm);
 }
 
+value_t ntvl_update(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 3);
+    CHECK_LIST(args[0]);
+    CHECK_INDEX(args[1]);
+    list_t list = ll_update(AS_LIST(args[0]), args[1], (int64_t)AS_NUMBER(args[2]), vm->ctx.alloc);
+    return wrap_list(list, vm);
+}
+
 value_t ntvl_prepend(const value_t* args, uint8_t n, vm_t* vm)
 {
     assert(n == 2);
     CHECK_LIST(args[0]);
     list_t list = ll_prepend(AS_LIST(args[0]), args[1], vm->ctx.alloc);
-    CHECK_OOM(list.cell);
-    value_t value = value_wrap_list(list, vm->ctx.alloc);
-    CHECK_OOM(AS_OBJ(value).cell);
-    return value;
+    return wrap_list(list, vm);
 }
 
 value_t ntvl_add(const value_t* args, uint8_t n, vm_t* vm)
@@ -180,10 +186,7 @@ value_t ntvl_add(const value_t* args, uint8_t n, vm_t* vm)
     CHECK_LIST(args[0]);
     CHECK_LIST(args[1]);
     list_t list = ll_add(AS_LIST(args[0]), AS_LIST(args[1]), vm->ctx.alloc);
-    CHECK_OOM(list.cell);
-    value_t value = value_wrap_list(list, vm->ctx.alloc);
-    CHECK_OOM(AS_OBJ(value).cell);
-    return value;
+    return wrap_list(list, vm);
 }
 
 value_t ntvl_zip(const value_t* args, uint8_t n, vm_t* vm)
