@@ -1,44 +1,10 @@
-CC ?= cc
-STD = -std=c17
-WARN = -Wall -Wextra -Werror -Wswitch-enum -pedantic
+include config.mk
+
 SAN ?= -fsanitize=address,undefined
-TARGET ?= long
-
-ifeq ($(OS),Windows_NT)
-LIB = build/$(TARGET).dll
-LIB_LDFLAGS = -Wl,--out-implib,build/lib$(TARGET).dll.a
-EXE_LDFLAGS =
-PIC =
-LDLIBS = -lm
-MOD_EXT = .dll
-MOD_LDFLAGS =
-RAYLIB_LIBS ?= -lraylib -lopengl32 -lgdi32 -lwinmm
-else ifeq ($(shell uname -s),Darwin)
-LIB = build/lib$(TARGET).dylib
-LIB_LDFLAGS = -install_name @rpath/lib$(TARGET).dylib
-EXE_LDFLAGS = -Wl,-rpath,@executable_path
-PIC = -fPIC
-LDLIBS = -lm
-MOD_EXT = .so
-MOD_LDFLAGS = -Wl,-rpath,@loader_path/..
-RAYLIB_LIBS ?= -Wl,-hidden-lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
-else
-LIB = build/lib$(TARGET).so
-LIB_LDFLAGS =
-EXE_LDFLAGS = -Wl,-rpath,'$$ORIGIN'
-PIC = -fPIC
-LDLIBS = -lm -ldl
-MOD_EXT = .so
-MOD_LDFLAGS = -Wl,-rpath,'$$ORIGIN/..' -Wl,--exclude-libs,ALL
-RAYLIB_LIBS ?= -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-endif
-
-RAYLIB_CFLAGS ?=
 
 RELEASE_FLAGS = $(STD) $(WARN) -O3 -flto=auto -fvisibility=hidden $(PIC)
 TEST_FLAGS = $(STD) $(WARN) -O0 -g -fno-omit-frame-pointer $(SAN) -DSV_ARENA_POISON
-DEBUG_FLAGS = $(STD) $(WARN) -O0 -g -fno-omit-frame-pointer $(SAN) -DSV_ARENA_POISON
-MOD_FLAGS = $(STD) $(WARN) -O2 -shared -fvisibility=hidden $(PIC)
+DEBUG_FLAGS = $(TEST_FLAGS) -fvisibility=hidden $(PIC)
 DEPFLAGS = -MMD -MP
 
 LIB_SRC = $(wildcard src/*.c) $(wildcard src/obj/*.c) $(wildcard src/deps/*.c) $(wildcard src/modules/*.c)
@@ -48,13 +14,18 @@ LIB_OBJ = $(LIB_SRC:src/%.c=build/release/%.o)
 OBJ = $(LIB_OBJ) build/release/main.o
 TEST_OBJ = $(LIB_SRC:src/%.c=build/test/%.o) \
        $(patsubst tests/%.c,build/test/tests_%.o,$(TEST_SRC))
-DEBUG_OBJ = $(LIB_SRC:src/%.c=build/debug/%.o) build/debug/main.o
+DEBUG_LIB_OBJ = $(LIB_SRC:src/%.c=build/debug/%.o)
+DEBUG_OBJ = $(DEBUG_LIB_OBJ) build/debug/main.o
 
+LIB = build/$(LIB_FILE)
 BIN = build/$(TARGET)
 TEST_BIN = build/$(TARGET)-test
-DEBUG_BIN = build/$(TARGET)-debug
+DEBUG_LIB = build/debug/$(LIB_FILE)
+DEBUG_BIN = build/debug/$(TARGET)
+VENDOR = $(patsubst vendor/%/Makefile,vendor-%,$(wildcard vendor/*/Makefile))
+VENDOR_DEBUG = $(VENDOR:%=%-debug)
 
-.PHONY: build run test debug clean static shared vendor
+.PHONY: build run test debug clean static shared vendor vendor-debug $(VENDOR) $(VENDOR_DEBUG)
 
 build: $(BIN)
 
@@ -72,7 +43,15 @@ static: $(LIB_OBJ)
 
 shared: $(LIB)
 
-vendor: build/vendor/raylib$(MOD_EXT)
+vendor: $(VENDOR)
+
+$(VENDOR): vendor-%: $(LIB)
+	$(MAKE) --no-print-directory -C vendor/$*
+
+vendor-debug: $(VENDOR_DEBUG)
+
+$(VENDOR_DEBUG): vendor-%-debug: $(DEBUG_LIB)
+	$(MAKE) --no-print-directory -C vendor/$* BUILD_DIR=$(CURDIR)/build/debug MOD_OPT="-O0 -g"
 
 clean:
 	rm -rf build
@@ -83,15 +62,14 @@ $(LIB): $(LIB_OBJ)
 $(BIN): build/release/main.o $(LIB)
 	$(CC) $(RELEASE_FLAGS) $(EXE_LDFLAGS) $< -Lbuild -l$(TARGET) -o $@ $(LDLIBS)
 
-build/vendor/raylib$(MOD_EXT): vendor/raylib/raylib.c src/long.h $(LIB)
-	@mkdir -p $(@D)
-	$(CC) $(MOD_FLAGS) $(RAYLIB_CFLAGS) -Isrc $< -Lbuild -l$(TARGET) $(MOD_LDFLAGS) $(RAYLIB_LIBS) -o $@
-
 $(TEST_BIN): $(TEST_OBJ)
 	$(CC) $(TEST_FLAGS) $^ -o $@ $(LDLIBS)
 
-$(DEBUG_BIN): $(DEBUG_OBJ)
-	$(CC) $(DEBUG_FLAGS) $^ -o $@ $(LDLIBS)
+$(DEBUG_LIB): $(DEBUG_LIB_OBJ)
+	$(CC) $(DEBUG_FLAGS) -shared $(LIB_LDFLAGS) $^ -o $@ $(LDLIBS)
+
+$(DEBUG_BIN): build/debug/main.o $(DEBUG_LIB)
+	$(CC) $(DEBUG_FLAGS) $(EXE_LDFLAGS) $< -Lbuild/debug -l$(TARGET) -o $@ $(LDLIBS)
 
 build/release/main.o: main.c
 	@mkdir -p $(@D)
@@ -111,7 +89,7 @@ build/test/%.o: src/%.c
 
 build/debug/main.o: main.c
 	@mkdir -p $(@D)
-	$(CC) $(DEBUG_FLAGS) -DLONG_BUILD $(DEPFLAGS) -Isrc -c $< -o $@
+	$(CC) $(DEBUG_FLAGS) $(DEPFLAGS) -Isrc -c $< -o $@
 
 build/debug/%.o: src/%.c
 	@mkdir -p $(@D)

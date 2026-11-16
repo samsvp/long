@@ -131,6 +131,8 @@ LONG_API const record_t* long_as_record(value_t);
 LONG_API const tuple_t* long_as_tuple(value_t);
 LONG_API const hashmap_t* long_as_map(value_t);
 LONG_API const actor_t* long_as_actor(value_t);
+
+LONG_API value_t long_value_borrow(value_t);
 /**
  * The user value's pointer if it was created with the vtable, NULL otherwise.
  */

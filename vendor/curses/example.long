@@ -1,0 +1,30 @@
+import curses("curses")
+
+w = curses::init()
+
+curses::box(w)
+
+(width, height) = curses::get_dims(w)
+curses::print(w, width / 2, height / 2, "Hello!", [])
+curses::print(w, width / 2, height / 2 + 1, "", [])
+curses::refresh(w)
+input = curses::input(w)
+
+ih = 0.2 * height
+iw = 0.2 * width
+sy = 10
+sx = 10
+
+color = curses::color_pair(curses::red(), curses::black())
+attr = curses::a_bold() || curses::a_underline() || color
+
+curses::new(sx, sy, iw, ih)
+|> curses::box()
+|> curses::attr_on(attr)
+|> curses::print(1, 1, input, [])
+|> curses::refresh()
+|> curses::del()
+
+curses::input(w)
+
+curses::deinit()

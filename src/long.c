@@ -1,5 +1,6 @@
 #include "long.h"
 #include "compiler.h"
+#include "obj.h"
 #include "std/allocator_std.h"
 
 bool long_is_nil(value_t v) { return IS_NIL(v); }
@@ -27,6 +28,9 @@ const record_t* long_as_record(value_t v) { return &AS_RECORD(v); }
 const tuple_t* long_as_tuple(value_t v) { return &AS_TUPLE(v); }
 const hashmap_t* long_as_map(value_t v) { return &AS_MAP(v); }
 const actor_t* long_as_actor(value_t v) { return &AS_ACTOR(v); }
+
+value_t long_value_borrow(value_t v)
+{ return value_borrow(v); }
 
 void* long_as_user(value_t v, const user_value_vtable_t* vtable)
 {
