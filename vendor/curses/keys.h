@@ -1,0 +1,99 @@
+/**
+ * The ncurses key codes, as (code, long name) pairs.
+ */
+#ifndef LONG_CURSES_KEYS_H
+#define LONG_CURSES_KEYS_H
+
+#define CURSES_KEYS(X)                                                                                        \
+    X(KEY_BREAK, "key_break")                                                                                 \
+    X(KEY_SRESET, "key_sreset")                                                                               \
+    X(KEY_RESET, "key_reset")                                                                                 \
+    X(KEY_DOWN, "key_down")                                                                                   \
+    X(KEY_UP, "key_up")                                                                                       \
+    X(KEY_LEFT, "key_left")                                                                                   \
+    X(KEY_RIGHT, "key_right")                                                                                 \
+    X(KEY_HOME, "key_home")                                                                                   \
+    X(KEY_BACKSPACE, "key_backspace")                                                                         \
+    X(KEY_DL, "key_dl")                                                                                       \
+    X(KEY_IL, "key_il")                                                                                       \
+    X(KEY_DC, "key_dc")                                                                                       \
+    X(KEY_IC, "key_ic")                                                                                       \
+    X(KEY_EIC, "key_eic")                                                                                     \
+    X(KEY_CLEAR, "key_clear")                                                                                 \
+    X(KEY_EOS, "key_eos")                                                                                     \
+    X(KEY_EOL, "key_eol")                                                                                     \
+    X(KEY_SF, "key_sf")                                                                                       \
+    X(KEY_SR, "key_sr")                                                                                       \
+    X(KEY_NPAGE, "key_npage")                                                                                 \
+    X(KEY_PPAGE, "key_ppage")                                                                                 \
+    X(KEY_STAB, "key_stab")                                                                                   \
+    X(KEY_CTAB, "key_ctab")                                                                                   \
+    X(KEY_CATAB, "key_catab")                                                                                 \
+    X(KEY_ENTER, "key_enter")                                                                                 \
+    X(KEY_PRINT, "key_print")                                                                                 \
+    X(KEY_LL, "key_ll")                                                                                       \
+    X(KEY_A1, "key_a1")                                                                                       \
+    X(KEY_A3, "key_a3")                                                                                       \
+    X(KEY_B2, "key_b2")                                                                                       \
+    X(KEY_C1, "key_c1")                                                                                       \
+    X(KEY_C3, "key_c3")                                                                                       \
+    X(KEY_BTAB, "key_btab")                                                                                   \
+    X(KEY_BEG, "key_beg")                                                                                     \
+    X(KEY_CANCEL, "key_cancel")                                                                               \
+    X(KEY_CLOSE, "key_close")                                                                                 \
+    X(KEY_COMMAND, "key_command")                                                                             \
+    X(KEY_COPY, "key_copy")                                                                                   \
+    X(KEY_CREATE, "key_create")                                                                               \
+    X(KEY_END, "key_end")                                                                                     \
+    X(KEY_EXIT, "key_exit")                                                                                   \
+    X(KEY_FIND, "key_find")                                                                                   \
+    X(KEY_HELP, "key_help")                                                                                   \
+    X(KEY_MARK, "key_mark")                                                                                   \
+    X(KEY_MESSAGE, "key_message")                                                                             \
+    X(KEY_MOVE, "key_move")                                                                                   \
+    X(KEY_NEXT, "key_next")                                                                                   \
+    X(KEY_OPEN, "key_open")                                                                                   \
+    X(KEY_OPTIONS, "key_options")                                                                             \
+    X(KEY_PREVIOUS, "key_previous")                                                                           \
+    X(KEY_REDO, "key_redo")                                                                                   \
+    X(KEY_REFERENCE, "key_reference")                                                                         \
+    X(KEY_REFRESH, "key_refresh")                                                                             \
+    X(KEY_REPLACE, "key_replace")                                                                             \
+    X(KEY_RESTART, "key_restart")                                                                             \
+    X(KEY_RESUME, "key_resume")                                                                               \
+    X(KEY_SAVE, "key_save")                                                                                   \
+    X(KEY_SBEG, "key_sbeg")                                                                                   \
+    X(KEY_SCANCEL, "key_scancel")                                                                             \
+    X(KEY_SCOMMAND, "key_scommand")                                                                           \
+    X(KEY_SCOPY, "key_scopy")                                                                                 \
+    X(KEY_SCREATE, "key_screate")                                                                             \
+    X(KEY_SDC, "key_sdc")                                                                                     \
+    X(KEY_SDL, "key_sdl")                                                                                     \
+    X(KEY_SELECT, "key_select")                                                                               \
+    X(KEY_SEND, "key_send")                                                                                   \
+    X(KEY_SEOL, "key_seol")                                                                                   \
+    X(KEY_SEXIT, "key_sexit")                                                                                 \
+    X(KEY_SFIND, "key_sfind")                                                                                 \
+    X(KEY_SHELP, "key_shelp")                                                                                 \
+    X(KEY_SHOME, "key_shome")                                                                                 \
+    X(KEY_SIC, "key_sic")                                                                                     \
+    X(KEY_SLEFT, "key_sleft")                                                                                 \
+    X(KEY_SMESSAGE, "key_smessage")                                                                           \
+    X(KEY_SMOVE, "key_smove")                                                                                 \
+    X(KEY_SNEXT, "key_snext")                                                                                 \
+    X(KEY_SOPTIONS, "key_soptions")                                                                           \
+    X(KEY_SPREVIOUS, "key_sprevious")                                                                         \
+    X(KEY_SPRINT, "key_sprint")                                                                               \
+    X(KEY_SREDO, "key_sredo")                                                                                 \
+    X(KEY_SREPLACE, "key_sreplace")                                                                           \
+    X(KEY_SRIGHT, "key_sright")                                                                               \
+    X(KEY_SRSUME, "key_srsume")                                                                               \
+    X(KEY_SSAVE, "key_ssave")                                                                                 \
+    X(KEY_SSUSPEND, "key_ssuspend")                                                                           \
+    X(KEY_SUNDO, "key_sundo")                                                                                 \
+    X(KEY_SUSPEND, "key_suspend")                                                                             \
+    X(KEY_UNDO, "key_undo")                                                                                   \
+    X(KEY_MOUSE, "key_mouse")                                                                                 \
+    X(KEY_RESIZE, "key_resize")
+
+#endif

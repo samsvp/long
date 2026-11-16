@@ -118,6 +118,7 @@ typedef enum {
     VM_ERR_MATCH_FAILED,
     VM_ERR_NO_CLAUSE,
     VM_ERR_STACK_OVERFLOW,
+    VM_ERR_NATIVE,
 } vm_error_kinds;
 
 #endif

@@ -2,6 +2,8 @@
 #include "compiler.h"
 #include "obj.h"
 #include "std/allocator_std.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 bool long_is_nil(value_t v) { return IS_NIL(v); }
 bool long_is_number(value_t v) { return IS_NUMBER(v); }
@@ -97,8 +99,21 @@ value_t long_type_error(value_t arg, const char* expected, const vm_t* vm)
                           vm->ctx.alloc);
 }
 
+value_t long_error(const vm_t* vm, const char* fmt, ...)
+{
+    char msg[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+    return value_init_err(error_fmt(VM_ERR_NATIVE, vm_file(vm), vm_line(vm), vm->ctx.alloc, "%s", msg),
+                          vm->ctx.alloc);
+}
+
 const char* long_field_name(const vm_ctx_t* ctx, uint32_t index) { return vm_field_name(ctx, index); }
 char* long_str_to_c(const sv_str_t* s, const sv_allocator_t* a) { return sv_str_to_c_str(*s, a); }
+const char* long_str_chars(const sv_str_t* s) { return s->chars; }
+int64_t long_str_size(const sv_str_t* s) { return s->size; }
 
 const sv_allocator_t* long_allocator(const vm_t* vm) { return vm->ctx.alloc; }
 const sv_allocator_t* long_ctx_allocator(const vm_ctx_t* ctx) { return ctx->alloc; }
@@ -132,5 +147,5 @@ int long_run_file(const char* path)
 value_t long_call_value(vm_t* vm, value_t f, const value_t* args, uint8_t n)
 { return vm_call_value(vm, f, args, n); }
 
-value_t long_call_name(vm_t* vm, const value_t* args, uint8_t n, sv_str_t function_name, sv_str_t file_name)
-{ return vm_call_name(vm, args, n, function_name, file_name); }
+value_t long_call_name(vm_t* vm, const value_t* args, uint8_t n, const char* function_name, const char* file_name)
+{ return vm_call_name(vm, args, n, sv_str_init(function_name), sv_str_init(file_name)); }

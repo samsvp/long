@@ -165,6 +165,10 @@ LONG_API void long_value_free(value_t*, const sv_allocator_t*);
  * The error a native returns when an argument is not of the expected type.
  */
 LONG_API value_t long_type_error(value_t arg, const char* expected, const vm_t*);
+/**
+ * The error a native returns when it fails, with a printf-style message.
+ */
+LONG_API value_t long_error(const vm_t*, const char* fmt, ...);
 
 /**
  * The source name of the field with the index, for get_field_fn.
@@ -174,6 +178,8 @@ LONG_API const char* long_field_name(const vm_ctx_t*, uint32_t index);
  * A NUL-terminated copy of the string, freed with long_free.
  */
 LONG_API char* long_str_to_c(const sv_str_t*, const sv_allocator_t*);
+LONG_API const char* long_str_chars(const sv_str_t*);
+LONG_API int64_t long_str_size(const sv_str_t*);
 
 /**
  * The allocator the VM allocates and frees values with.
@@ -195,6 +201,6 @@ LONG_API value_t long_call_value(vm_t*, value_t, const value_t*, uint8_t);
 /**
  * Calls the given function by name.
  */
-LONG_API value_t long_call_name(vm_t*, const value_t*, uint8_t, sv_str_t function_name, sv_str_t file_name);
+LONG_API value_t long_call_name(vm_t*, const value_t*, uint8_t, const char* function_name, const char* file_name);
 
 #endif

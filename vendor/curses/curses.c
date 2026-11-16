@@ -3,13 +3,15 @@
  */
 
 #include "long.h"
-#define SV_IMPLEMENTATION
-#include "../../src/std/string.h"
 #include <locale.h>
+#define NCURSES_WIDECHAR 1
 #include <ncurses.h>
+#include "keys.h"
 #include <assert.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <wchar.h>
 
 typedef struct window_t {
     WINDOW* w;
@@ -17,21 +19,23 @@ typedef struct window_t {
 
 // just a random number
 static const uint32_t WINDOW_TAG = 51235;
-static const char* WINDOW_NAME = "ncurses_window";
+static const char* WINDOW_NAME = "Window";
 
 static int pair_idx = 0;
 
 #define ASSERT_WINDOW(w_name)                                                                                 \
     window_t* w_name##_value = long_as_user(args[0], &window_vtable);                                         \
-    if (w_name##_value == NULL || w_name##_value->w == NULL)                                                  \
-        return long_type_error(args[0], "Window", vm);                                                        \
+    if (w_name##_value == NULL)                                                                               \
+        return long_type_error(args[0], WINDOW_NAME, vm);                                                     \
+    if (w_name##_value->w == NULL)                                                                            \
+        return long_error(vm, "The window was deleted");                                                      \
     WINDOW* w_name = w_name##_value->w
 
 static bool window_eql(void* w1, void* w2)
-{ return ((window_t*)w1)->w == ((window_t*)w2)->w; }
+{ return w1 == w2; }
 
 static uint32_t window_hash(void* w)
-{ return (uint32_t)((uintptr_t)((window_t*)w)->w >> 2); }
+{ return (uint32_t)((uintptr_t)w >> 4); }
 
 static void window_free(void* ptr, const sv_allocator_t* a)
 {
@@ -75,11 +79,11 @@ static value_t ntv_init(const value_t* args, uint8_t n, vm_t* vm)
     (void)args;
     pair_idx = 0;
 
-    setlocale(LC_ALL, "");
+    setlocale(LC_CTYPE, "");
 
     WINDOW* window = initscr();
     if (window == NULL)
-        return long_value_oom();
+        return long_error(vm, "Cannot initialize the terminal");
 
     WRAP_WIN(w, window);
 
@@ -125,7 +129,7 @@ static value_t ntv_new_win(const value_t* args, uint8_t n, vm_t* vm)
     assert(n == 4);
     for (int i = 0; i < 4; i++)
         if (!long_is_number(args[i]))
-            return long_type_error(args[i], "Number", vm);
+            return long_type_error(args[i], "number", vm);
 
     int x = (int)long_as_number(args[0]);
     int y = (int)long_as_number(args[1]);
@@ -133,12 +137,10 @@ static value_t ntv_new_win(const value_t* args, uint8_t n, vm_t* vm)
     int h = (int)long_as_number(args[3]);
     WINDOW* window = newwin(h, w, y, x);
     if (window == NULL)
-        return long_value_oom();
+        return long_error(vm, "Cannot create a %d x %d window at %d, %d", w, h, x, y);
     WRAP_WIN(w_window, window);
 
-    value_t ret = long_value_user(w_window, &window_vtable, WINDOW_TAG, WINDOW_NAME, long_allocator(vm));
-
-    return ret;
+    return long_value_user(w_window, &window_vtable, WINDOW_TAG, WINDOW_NAME, long_allocator(vm));
 }
 
 /**
@@ -152,47 +154,69 @@ static value_t ntv_wmvprint(const value_t* args, uint8_t n, vm_t* vm)
 
     for (int i = 1; i < 3; i++)
         if (!long_is_number(args[i]))
-            return long_type_error(args[i], "Number", vm);
+            return long_type_error(args[i], "number", vm);
 
-    value_t formated_str = long_call_name(vm, &args[3], 2, sv_str_init("sprintf"), sv_str_init(""));
+    int x = (int)long_as_number(args[1]);
+    int y = (int)long_as_number(args[2]);
+    if (wmove(w, y, x) == ERR)
+        return long_error(vm, "Position %d, %d is outside the window", x, y);
+
+    value_t formated_str = long_call_name(vm, &args[3], 2, "sprintf", "");
     if (long_is_error(formated_str))
         return formated_str;
 
-    wmove(w, long_as_number(args[2]), long_as_number(args[1]));
-
     const sv_str_t* s = long_as_str(formated_str);
-    waddnstr(w, s->chars, (int)s->size);
+    waddnstr(w, long_str_chars(s), (int)long_str_size(s));
 
     long_value_free(&formated_str, long_allocator(vm));
 
     return long_value_borrow(args[0]);
 }
 
+/**
+ * input(window, max): reads a line of at most max characters, with the erase and kill keys, in
+ * any input mode. Returns nil when no line was read: end of input, or no key in nodelay or
+ * timeout mode.
+ */
 static value_t ntv_input(const value_t* args, uint8_t n, vm_t* vm)
 {
-    assert(n == 1);
+    assert(n == 2);
 
     ASSERT_WINDOW(w);
 
-    sv_str_builder buffer = sv_strb_init();
+    if (!long_is_number(args[1]))
+        return long_type_error(args[1], "number", vm);
+    int max = (int)long_as_number(args[1]);
+    if (max < 1)
+        return long_error(vm, "Input size must be at least 1, got %d", max);
+
     const sv_allocator_t* a = long_allocator(vm);
-    int c;
-    while ((c = wgetch(w)), c != '\n' && c != ERR) {
-        if (c > 255) continue;
+    wint_t* line = long_alloc(a, ((size_t)max + 1) * sizeof(wint_t));
+    char* text = long_alloc(a, (size_t)max * MB_LEN_MAX + 1);
+    value_t ret = long_value_oom();
+    if (line == NULL || text == NULL)
+        goto done;
 
-        if (sv_strb_add_char(&buffer, c, a) < 0)
-            goto oom;
+    ret = long_value_nil();
+    if (wgetn_wstr(w, line, max) == ERR)
+        goto done;
+
+    size_t size = 0;
+    mbstate_t state = { 0 };
+    for (int i = 0; line[i] != 0; i++) {
+        size_t k = wcrtomb(text + size, (wchar_t)line[i], &state);
+        if (k != (size_t)-1)
+            size += k;
     }
+    text[size] = '\0';
+    ret = long_value_str(text, a);
 
-    if (sv_strb_add_char(&buffer, '\0', a) < 0)
-        goto oom;
-
-    value_t ret = long_value_str(buffer.arr, a);
-    sv_strb_deinit(&buffer, a);
+done:
+    if (line != NULL)
+        long_free(a, line);
+    if (text != NULL)
+        long_free(a, text);
     return ret;
-oom:
-    sv_strb_deinit(&buffer, a);
-    return long_value_oom();
 }
 
 static value_t ntv_refresh(const value_t* args, uint8_t n, vm_t* vm)
@@ -211,7 +235,7 @@ static value_t ntv_del_win(const value_t* args, uint8_t n, vm_t* vm)
 
     window_t* w = long_as_user(args[0], &window_vtable);
     if (w == NULL)
-        return long_type_error(args[0], "Window", vm);
+        return long_type_error(args[0], WINDOW_NAME, vm);
 
     if (w->w != stdscr && w->w != NULL) {
         delwin(w->w);
@@ -221,40 +245,154 @@ static value_t ntv_del_win(const value_t* args, uint8_t n, vm_t* vm)
     return long_value_nil();
 }
 
-#define ATTR(attr)                                                                                            \
-static value_t ntv_##attr(const value_t* args, uint8_t n, vm_t* vm)                                           \
-{                                                                                                             \
-    (void)args, (void) n, (void)vm;                                                                           \
-    return long_value_number(attr);                                                                           \
+static value_t ntv_keypad(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    ASSERT_WINDOW(w);
+
+    if (!long_is_bool(args[1]))
+        return long_type_error(args[1], "bool", vm);
+
+    keypad(w, long_as_bool(args[1]));
+    return long_value_borrow(args[0]);
 }
 
-ATTR(A_NORMAL)
-ATTR(A_STANDOUT)
-ATTR(A_UNDERLINE)
-ATTR(A_REVERSE)
-ATTR(A_BLINK)
-ATTR(A_DIM)
-ATTR(A_BOLD)
-ATTR(A_PROTECT)
-ATTR(A_INVIS)
-ATTR(A_ALTCHARSET)
-ATTR(A_CHARTEXT)
+static value_t ntv_getch(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
 
-#define COLOR(attr)                                                                                           \
-static value_t ntv_##attr(const value_t* args, uint8_t n, vm_t* vm)                                           \
-{                                                                                                             \
-    (void)args, (void) n, (void)vm;                                                                           \
-    return long_value_number(attr);                                                                           \
+    ASSERT_WINDOW(w);
+
+    int c = wgetch(w);
+    return c == ERR ? long_value_nil() : long_value_number(c);
 }
 
-COLOR(COLOR_BLACK)
-COLOR(COLOR_RED)
-COLOR(COLOR_GREEN)
-COLOR(COLOR_YELLOW)
-COLOR(COLOR_BLUE)
-COLOR(COLOR_MAGENTA)
-COLOR(COLOR_CYAN)
-COLOR(COLOR_WHITE)
+// a terminal-wide mode turned on or off by a bool
+#define MODE(name, on, off)                                                                                   \
+static value_t ntv_##name(const value_t* args, uint8_t n, vm_t* vm)                                           \
+{                                                                                                             \
+    assert(n == 1);                                                                                           \
+    if (!long_is_bool(args[0]))                                                                               \
+        return long_type_error(args[0], "bool", vm);                                                          \
+    if (long_as_bool(args[0]))                                                                                \
+        on();                                                                                                 \
+    else                                                                                                      \
+        off();                                                                                                \
+    return long_value_nil();                                                                                  \
+}
+
+MODE(cbreak, cbreak, nocbreak)
+MODE(raw, raw, noraw)
+MODE(echo, echo, noecho)
+
+static value_t ntv_nodelay(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    ASSERT_WINDOW(w);
+
+    if (!long_is_bool(args[1]))
+        return long_type_error(args[1], "bool", vm);
+
+    nodelay(w, long_as_bool(args[1]));
+    return long_value_borrow(args[0]);
+}
+
+/**
+ * timeout(window, ms): getch waits at most ms milliseconds, forever if negative.
+ */
+static value_t ntv_timeout(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 2);
+
+    ASSERT_WINDOW(w);
+
+    if (!long_is_number(args[1]))
+        return long_type_error(args[1], "number", vm);
+
+    wtimeout(w, (int)long_as_number(args[1]));
+    return long_value_borrow(args[0]);
+}
+
+/**
+ * chgat(window, x, y, count, attr): changes the attributes of count characters from x, y.
+ */
+static value_t ntv_chgat(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 5);
+
+    ASSERT_WINDOW(w);
+
+    for (int i = 1; i < 5; i++)
+        if (!long_is_number(args[i]))
+            return long_type_error(args[i], "number", vm);
+
+    int x = (int)long_as_number(args[1]);
+    int y = (int)long_as_number(args[2]);
+    attr_t attr = (attr_t)long_as_number(args[4]);
+    if (mvwchgat(w, y, x, (int)long_as_number(args[3]), attr & ~A_COLOR, (short)PAIR_NUMBER(attr), NULL) == ERR)
+        return long_error(vm, "Position %d, %d is outside the window", x, y);
+    return long_value_borrow(args[0]);
+}
+
+static value_t ntv_clear(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    ASSERT_WINDOW(w);
+
+    wclear(w);
+    return long_value_borrow(args[0]);
+}
+
+#define CONSTANT(c)                                                                                           \
+static value_t ntv_##c(const value_t* args, uint8_t n, vm_t* vm)                                              \
+{                                                                                                             \
+    (void)args, (void)n, (void)vm;                                                                            \
+    return long_value_number(c);                                                                              \
+}
+
+CONSTANT(A_NORMAL)
+CONSTANT(A_STANDOUT)
+CONSTANT(A_UNDERLINE)
+CONSTANT(A_REVERSE)
+CONSTANT(A_BLINK)
+CONSTANT(A_DIM)
+CONSTANT(A_BOLD)
+CONSTANT(A_PROTECT)
+CONSTANT(A_INVIS)
+CONSTANT(A_ALTCHARSET)
+CONSTANT(A_CHARTEXT)
+
+// defined here instead of with CONSTANT, which would get key already expanded to its number
+#define KEY_NATIVE(key, name)                                                                                 \
+static value_t ntv_##key(const value_t* args, uint8_t n, vm_t* vm)                                            \
+{                                                                                                             \
+    (void)args, (void)n, (void)vm;                                                                            \
+    return long_value_number(key);                                                                            \
+}
+CURSES_KEYS(KEY_NATIVE)
+#undef KEY_NATIVE
+
+static value_t ntv_key_f(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    if (!long_is_number(args[0]))
+        return long_type_error(args[0], "number", vm);
+
+    return long_value_number(KEY_F((int)long_as_number(args[0])));
+}
+
+CONSTANT(COLOR_BLACK)
+CONSTANT(COLOR_RED)
+CONSTANT(COLOR_GREEN)
+CONSTANT(COLOR_YELLOW)
+CONSTANT(COLOR_BLUE)
+CONSTANT(COLOR_MAGENTA)
+CONSTANT(COLOR_CYAN)
+CONSTANT(COLOR_WHITE)
 
 static value_t ntv_color_pair(const value_t* args, uint8_t n, vm_t* vm)
 {
@@ -262,7 +400,7 @@ static value_t ntv_color_pair(const value_t* args, uint8_t n, vm_t* vm)
 
     for (int i = 0; i < 2; i++)
         if (!long_is_number(args[i]))
-            return long_type_error(args[i], "Number", vm);
+            return long_type_error(args[i], "number", vm);
 
     init_pair(++pair_idx, long_as_number(args[0]), long_as_number(args[1]));
 
@@ -276,7 +414,7 @@ static value_t ntv_wattr_on(const value_t* args, uint8_t n, vm_t* vm)
     ASSERT_WINDOW(w);
 
     if (!long_is_number(args[1]))
-        return long_type_error(args[1], "Number", vm);
+        return long_type_error(args[1], "number", vm);
 
     wattr_on(w, long_as_number(args[1]), NULL);
     return long_value_borrow(args[0]);
@@ -289,7 +427,7 @@ static value_t ntv_wattr_off(const value_t* args, uint8_t n, vm_t* vm)
     ASSERT_WINDOW(w);
 
     if (!long_is_number(args[1]))
-        return long_type_error(args[1], "Number", vm);
+        return long_type_error(args[1], "number", vm);
 
     wattr_off(w, long_as_number(args[1]), NULL);
     return long_value_borrow(args[0]);
@@ -304,7 +442,16 @@ static native_fn_t fns[] = {
     { ntv_wmvprint, 5, "print" },
     { ntv_getdims, 1, "get_dims" },
     { ntv_refresh, 1, "refresh" },
-    { ntv_input, 1, "input" },
+    { ntv_input, 2, "input" },
+    { ntv_keypad, 2, "keypad" },
+    { ntv_getch, 1, "getch" },
+    { ntv_cbreak, 1, "cbreak" },
+    { ntv_raw, 1, "raw" },
+    { ntv_echo, 1, "echo" },
+    { ntv_nodelay, 2, "nodelay" },
+    { ntv_timeout, 2, "timeout" },
+    { ntv_chgat, 5, "chgat" },
+    { ntv_clear, 1, "clear" },
 
     // attrs
     { ntv_A_NORMAL, 0, "a_normal" },
@@ -333,6 +480,12 @@ static native_fn_t fns[] = {
     { ntv_COLOR_WHITE, 0, "white" },
 
     { ntv_color_pair, 2, "color_pair" },
+
+    // keys
+    { ntv_key_f, 1, "key_f" },
+#define KEY_ENTRY(key, name) { ntv_##key, 0, name },
+    CURSES_KEYS(KEY_ENTRY)
+#undef KEY_ENTRY
 };
 
 static const native_module_t module = { "curses", fns, sizeof(fns) / sizeof(fns[0]) };
