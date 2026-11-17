@@ -8,7 +8,7 @@ curses::box(w)
 curses::print(w, width / 2, height / 2, "Hello!", [])
 curses::print(w, width / 2, height / 2 + 1, "", [])
 curses::refresh(w)
-input = curses::input(w)
+input = curses::input(w, 100)
 
 ih = 0.2 * height
 iw = 0.2 * width
@@ -25,6 +25,6 @@ curses::new(sx, sy, iw, ih)
 |> curses::refresh()
 |> curses::del()
 
-curses::input(w)
+curses::input(w, 1)
 
 curses::deinit()

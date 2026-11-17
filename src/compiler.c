@@ -1649,6 +1649,22 @@ static void add_native_mod(compiler_t* c, native_module_t mod, ctx_t* ctx)
     module_put(&c->modules.compiled_modules, mod_name, value_true, ctx);
 }
 
+/* Defines the library's functions at the import, so their slots follow the globals before them. */
+static void define_native_mod(compiler_t* c, const char* path, const native_module_t* mod, int64_t line,
+                              ctx_t* ctx)
+{
+    sv_str_t mod_name = sv_str_init(path);
+    for (int64_t i = 0; i < mod->native_count; i++) {
+        value_t fn_val = value_init_native(mod->native_fns[i], &ctx->alloc);
+        if (AS_OBJ(fn_val).cell == NULL)
+            compiler_oom(ctx);
+        add_const(c, ctx, fn_val);
+        emit(c, ctx, OP_SET_GLOBAL, line);
+        globals_add(&c->globals, sv_str_init(mod->native_fns[i].name), mod_name, line, ctx, c->scratch);
+    }
+    module_put(&c->modules.compiled_modules, mod_name, value_nil, ctx);
+}
+
 /* Compiles the module unless it already is, and binds its alias. Returns whether it was compiled now. */
 static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx_t* ctx)
 {
@@ -1693,7 +1709,7 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
                 native_lib_close(&lib);
                 compiler_oom(ctx);
             }
-            add_native_mod(c, (native_module_t){ lib_path, lib.module.native_fns, lib.module.native_count, NULL }, ctx);
+            define_native_mod(c, lib_path, &lib.module, line, ctx);
         }
     } else {
         value_t path_key = value_init_str(full_path, c->scratch);
