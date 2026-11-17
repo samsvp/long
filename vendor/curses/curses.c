@@ -11,6 +11,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include <wchar.h>
 
 typedef struct window_t {
@@ -144,7 +145,8 @@ static value_t ntv_new_win(const value_t* args, uint8_t n, vm_t* vm)
 }
 
 /**
- * print(window, x, y, fmt_string, values): prints the format string on the given x and y positions.
+ * print(window, x, y, fmt_string, values): prints the format string at x, y. Each line starts at x, and
+ * lines below the window are cut off.
  */
 static value_t ntv_wmvprint(const value_t* args, uint8_t n, vm_t* vm)
 {
@@ -166,7 +168,15 @@ static value_t ntv_wmvprint(const value_t* args, uint8_t n, vm_t* vm)
         return formated_str;
 
     const sv_str_t* s = long_as_str(formated_str);
-    waddnstr(w, long_str_chars(s), (int)long_str_size(s));
+    const char* line = long_str_chars(s);
+    const char* end = line + long_str_size(s);
+    for (int row = y; wmove(w, row, x) != ERR; row++) {
+        const char* nl = memchr(line, '\n', (size_t)(end - line));
+        waddnstr(w, line, (int)((nl != NULL ? nl : end) - line));
+        if (nl == NULL)
+            break;
+        line = nl + 1;
+    }
 
     long_value_free(&formated_str, long_allocator(vm));
 
@@ -346,6 +356,16 @@ static value_t ntv_clear(const value_t* args, uint8_t n, vm_t* vm)
     return long_value_borrow(args[0]);
 }
 
+static value_t ntv_erase(const value_t* args, uint8_t n, vm_t* vm)
+{
+    assert(n == 1);
+
+    ASSERT_WINDOW(w);
+
+    werase(w);
+    return long_value_borrow(args[0]);
+}
+
 #define CONSTANT(c)                                                                                           \
 static value_t ntv_##c(const value_t* args, uint8_t n, vm_t* vm)                                              \
 {                                                                                                             \
@@ -452,6 +472,7 @@ static native_fn_t fns[] = {
     { ntv_timeout, 2, "timeout" },
     { ntv_chgat, 5, "chgat" },
     { ntv_clear, 1, "clear" },
+    { ntv_erase, 1, "erase" },
 
     // attrs
     { ntv_A_NORMAL, 0, "a_normal" },
