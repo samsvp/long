@@ -599,7 +599,7 @@ class Gen:
             w(f'    {{ {fn}, {arity}, "{name}" }},')
         w("};")
         w()
-        w('static const native_module_t module = { "raylib", fns, sizeof(fns) / sizeof(fns[0]) };')
+        w('static const native_module_t module = { "raylib", fns, sizeof(fns) / sizeof(fns[0]), NULL };')
         w()
         w("const native_module_t* long_module_init(void)")
         w("{")

@@ -488,7 +488,13 @@ static native_fn_t fns[] = {
 #undef KEY_ENTRY
 };
 
-static const native_module_t module = { "curses", fns, sizeof(fns) / sizeof(fns[0]) };
+static void module_deinit(void)
+{
+    if (!isendwin())
+        endwin();
+}
+
+static const native_module_t module = { "curses", fns, sizeof(fns) / sizeof(fns[0]), module_deinit };
 
 const native_module_t* long_module_init(void)
 {

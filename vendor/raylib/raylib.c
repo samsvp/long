@@ -11961,7 +11961,7 @@ static native_fn_t fns[] = {
     { k_RAYWHITE, 0, "RAYWHITE" },
 };
 
-static const native_module_t module = { "raylib", fns, sizeof(fns) / sizeof(fns[0]) };
+static const native_module_t module = { "raylib", fns, sizeof(fns) / sizeof(fns[0]), NULL };
 
 const native_module_t* long_module_init(void)
 {

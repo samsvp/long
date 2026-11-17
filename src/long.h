@@ -99,6 +99,8 @@ typedef struct native_module_t {
     const char* name;
     native_fn_t* native_fns;
     int native_count;
+    // called when the VM shuts down, NULL if none
+    void (*deinit)(void);
 } native_module_t;
 
 /**

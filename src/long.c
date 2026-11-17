@@ -132,15 +132,14 @@ int long_run_file(const char* path)
     }
 
     sv_opt_t(error_t) err = vm_run(&vm);
+    vm_deinit(&vm);
     if (err.is_some) {
         sv_log_error(&ctx.logger, "%.*s%.*s", (int)err.value.msg.size, err.value.msg.chars,
                      (int)err.value.trace.size, err.value.trace.chars);
         error_free(&err.value, &ctx.alloc);
-        vm_deinit(&vm);
         return 1;
     }
 
-    vm_deinit(&vm);
     return 0;
 }
 

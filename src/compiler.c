@@ -1693,7 +1693,7 @@ static bool compile_import(compiler_t* c, const sexpr_t* args, int64_t line, ctx
                 native_lib_close(&lib);
                 compiler_oom(ctx);
             }
-            add_native_mod(c, (native_module_t){ lib_path, lib.module.native_fns, lib.module.native_count }, ctx);
+            add_native_mod(c, (native_module_t){ lib_path, lib.module.native_fns, lib.module.native_count, NULL }, ctx);
         }
     } else {
         value_t path_key = value_init_str(full_path, c->scratch);
